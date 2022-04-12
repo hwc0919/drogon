@@ -13,13 +13,13 @@
  */
 
 #include "HttpClientImpl.h"
-#include "HttpResponseImpl.h"
-#include "HttpRequestImpl.h"
-#include "HttpResponseParser.h"
-#include "HttpAppFrameworkImpl.h"
 #include <drogon/config.h>
-#include <algorithm>
 #include <stdlib.h>
+#include <algorithm>
+#include "HttpAppFrameworkImpl.h"
+#include "HttpRequestImpl.h"
+#include "HttpResponseImpl.h"
+#include "HttpResponseParser.h"
 
 using namespace trantor;
 using namespace drogon;
@@ -369,6 +369,8 @@ void HttpClientImpl::sendRequestInLoop(const drogon::HttpRequestPtr &req,
                 }
             }
 
+            // NOTE1: 此分支 `hasIpv6Address` 必为 false
+            // NOTE2: 此分支 `serverAddr_.portNetEndian()` 必不为 0
             if (serverAddr_.ipNetEndian() == 0 && !hasIpv6Address &&
                 !domain_.empty() && serverAddr_.portNetEndian() != 0)
             {
@@ -382,19 +384,23 @@ void HttpClientImpl::sendRequestInLoop(const drogon::HttpRequestPtr &req,
                 resolverPtr_->resolve(
                     domain_,
                     [thisPtr = shared_from_this(),
+                     // 根据NOTE1: `hasIpv6Address` 必为 false
                      hasIpv6Address](const trantor::InetAddress &addr) {
                         thisPtr->loop_->runInLoop([thisPtr,
                                                    addr,
                                                    hasIpv6Address]() {
+                            // 根据NOTE2: port 必不为 0
                             auto port = thisPtr->serverAddr_.portNetEndian();
                             thisPtr->serverAddr_ = addr;
                             thisPtr->serverAddr_.setPortNetEndian(port);
+                            // 现在 serverAddr_.portNetEndian() 必不为 0
                             LOG_TRACE << "dns:domain=" << thisPtr->domain_
                                       << ";ip=" << thisPtr->serverAddr_.toIp();
                             thisPtr->dns_ = false;
                             if ((thisPtr->serverAddr_.ipNetEndian() != 0 ||
-                                 hasIpv6Address) &&
-                                thisPtr->serverAddr_.portNetEndian() != 0)
+                                 hasIpv6Address) && // `hasIpv6Address` 应该重新计算!
+                                /* thisPtr->serverAddr_.portNetEndian() != 0 */
+                                true)
                             {
                                 thisPtr->createTcpClient();
                             }
