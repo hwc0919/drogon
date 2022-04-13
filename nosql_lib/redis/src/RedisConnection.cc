@@ -319,3 +319,110 @@ void RedisConnection::disconnect()
     });
     f.get();
 }
+
+void RedisConnection::sendSubscribe(
+    const std::shared_ptr<SubscribeCallbacks> &callbacksPtr,
+    const std::string &channel)
+{
+    LOG_TRACE << "redis command: SUBSCRIBE " << channel;
+    try
+    {
+        auto fullCommand =
+            getFormattedCommand(REDIS_CMD_SUBSCRIBE, channel.c_str());
+        if (loop_->isInLoopThread())
+        {
+            sendSubscribeInLoop(fullCommand, callbacksPtr);
+        }
+        else
+        {
+            loop_->queueInLoop(
+                [this,
+                 callbacksPtr,
+                 fullCommand = std::move(fullCommand)]() mutable {
+                    sendSubscribeInLoop(fullCommand, callbacksPtr);
+                });
+        }
+    }
+    catch (const RedisException &err)
+    {
+        callbacksPtr->exceptionCallback_(err);
+        // TODO: Instead of notifying user, should we keep retrying?
+    }
+}
+
+void RedisConnection::sendFormattedSubscribe(
+    std::string &&fullCommand,
+    const std::shared_ptr<SubscribeCallbacks> &callbacksPtr)
+{
+    if (loop_->isInLoopThread())
+    {
+        sendSubscribeInLoop(fullCommand, callbacksPtr);
+    }
+    else
+    {
+        loop_->queueInLoop([this,
+                            callbacksPtr,
+                            fullCommand = std::move(fullCommand)]() mutable {
+            sendSubscribeInLoop(fullCommand, callbacksPtr);
+        });
+    }
+}
+
+void RedisConnection::sendSubscribeInLoop(
+    const std::string &command,
+    const std::shared_ptr<SubscribeCallbacks> &callbacksPtr)
+{
+    redisAsyncFormattedCommand(
+        redisContext_,
+        [](redisAsyncContext *context, void *r, void *callbacks) {
+            auto thisPtr = static_cast<RedisConnection *>(context->ev.data);
+            thisPtr->handleSubscribeResult(static_cast<redisReply *>(r),
+                                           static_cast<SubscribeCallbacks *>(
+                                               callbacks));
+        },
+        callbacksPtr.get(),
+        command.c_str(),
+        command.length());
+}
+
+void RedisConnection::handleSubscribeResult(redisReply *result,
+                                            SubscribeCallbacks *callbacks)
+{
+    if (!result)
+    {
+        callbacks->exceptionCallback_(
+            RedisException(RedisErrorCode::kConnectionBroken,
+                           "Network failure"));
+    }
+    else if (result->type == REDIS_REPLY_ERROR)
+    {
+        callbacks->exceptionCallback_(
+            RedisException(RedisErrorCode::kRedisError,
+                           std::string{result->str, result->len}));
+    }
+    else
+    {
+        assert(result->type == REDIS_REPLY_ARRAY && result->elements == 3);
+        if (strcmp(result->element[0]->str, "message") == 0)
+        {
+            std::string channel(result->element[1]->str,
+                                result->element[1]->len);
+            std::string message(result->element[2]->str,
+                                result->element[2]->len);
+            callbacks->messageCallback_(std::move(channel), std::move(message));
+        }
+        else
+        {
+            callbacks->resultCallback_(RedisResult(result));
+        }
+    }
+
+    if (resultCallbacks_.empty())
+    {
+        assert(exceptionCallbacks_.empty());
+        if (idleCallback_)
+        {
+            idleCallback_(shared_from_this());
+        }
+    }
+}

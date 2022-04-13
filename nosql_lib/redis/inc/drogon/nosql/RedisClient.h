@@ -122,6 +122,11 @@ class DROGON_EXPORT RedisClient
                                   string_view command,
                                   ...) noexcept = 0;
 
+    virtual void subscribeAsync(RedisResultCallback &&resultCallback,
+                                RedisExceptionCallback &&exceptionCallback,
+                                RedisMessageCallback &&subscribeCallback,
+                                const std::string &channel) noexcept = 0;
+
     /**
      * @brief Create a redis transaction object.
      *

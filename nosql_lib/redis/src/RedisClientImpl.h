@@ -14,6 +14,7 @@
 #pragma once
 
 #include "RedisConnection.h"
+#include "SubscribeCallbacks.h"
 #include <drogon/nosql/RedisClient.h>
 #include <trantor/utils/NonCopyable.h>
 #include <trantor/net/EventLoopThreadPool.h>
@@ -40,6 +41,10 @@ class RedisClientImpl final
                           RedisExceptionCallback &&exceptionCallback,
                           string_view command,
                           ...) noexcept override;
+    void subscribeAsync(RedisResultCallback &&resultCallback,
+                        RedisExceptionCallback &&exceptionCallback,
+                        RedisMessageCallback &&subscribeCallback,
+                        const std::string &channel) noexcept override;
     ~RedisClientImpl() override;
     RedisTransactionPtr newTransaction() noexcept(false) override
     {
@@ -71,8 +76,8 @@ class RedisClientImpl final
     std::mutex connectionsMutex_;
     std::unordered_set<RedisConnectionPtr> connections_;
     std::vector<RedisConnectionPtr> readyConnections_;
+    RedisConnectionPtr subscribeConnection_;
     size_t connectionPos_{0};
-    RedisConnectionPtr newConnection(trantor::EventLoop *loop);
     const trantor::InetAddress serverAddr_;
     const std::string password_;
     const unsigned int db_;
@@ -80,6 +85,14 @@ class RedisClientImpl final
     double timeout_{-1.0};
     std::list<std::shared_ptr<std::function<void(const RedisConnectionPtr &)>>>
         tasks_;
+    std::list<std::shared_ptr<std::function<void(const RedisConnectionPtr &)>>>
+        subscribeTasks_;
+    std::unordered_map<std::string, std::shared_ptr<SubscribeCallbacks>>
+        allSubscribes_;
+
+    RedisConnectionPtr newConnection(trantor::EventLoop *loop,
+                                     bool isSub = false);
+
     std::shared_ptr<RedisTransaction> makeTransaction(
         const RedisConnectionPtr &connPtr);
     void handleNextTask(const RedisConnectionPtr &connPtr);
@@ -87,6 +100,8 @@ class RedisClientImpl final
                                      RedisResultCallback &&resultCallback,
                                      RedisExceptionCallback &&exceptionCallback,
                                      va_list ap);
+    void subscribeNext(const RedisConnectionPtr &connPtr);
+    void subscribeAll(const RedisConnectionPtr &connPtr);
 };
 }  // namespace nosql
 }  // namespace drogon

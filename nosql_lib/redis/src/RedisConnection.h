@@ -25,6 +25,10 @@
 #include <memory>
 #include <queue>
 
+#include "SubscribeCallbacks.h"
+
+#define REDIS_CMD_SUBSCRIBE "subscribe"
+
 namespace drogon
 {
 namespace nosql
@@ -86,6 +90,15 @@ class RedisConnection : public trantor::NonCopyable,
         free(cmd);
         return fullCommand;
     }
+    static std::string getFormattedCommand(string_view command,
+                                           ...) noexcept(false)
+    {
+        va_list args;
+        va_start(args, command);
+        std::string fullCommand = getFormattedCommand(command, args);
+        va_end(args);
+        return fullCommand;
+    }
     void sendFormattedCommand(std::string &&command,
                               RedisResultCallback &&resultCallback,
                               RedisExceptionCallback &&exceptionCallback)
@@ -143,6 +156,13 @@ class RedisConnection : public trantor::NonCopyable,
         }
     }
 
+    void sendSubscribe(const std::shared_ptr<SubscribeCallbacks> &callbacksPtr,
+                       const std::string &channel);
+
+    void sendFormattedSubscribe(
+        std::string &&command,
+        const std::shared_ptr<SubscribeCallbacks> &callbacksPtr);
+
     ~RedisConnection()
     {
         LOG_TRACE << (int)status_;
@@ -194,6 +214,12 @@ class RedisConnection : public trantor::NonCopyable,
     void sendCommandInLoop(const std::string &command,
                            RedisResultCallback &&resultCallback,
                            RedisExceptionCallback &&exceptionCallback);
+    void handleSubscribeResult(redisReply *result,
+                               SubscribeCallbacks *callbacks);
+    void sendSubscribeInLoop(
+        const std::string &command,
+        const std::shared_ptr<SubscribeCallbacks> &callbacksPtr);
+
     void handleDisconnect();
 };
 using RedisConnectionPtr = std::shared_ptr<RedisConnection>;

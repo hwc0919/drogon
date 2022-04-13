@@ -15,7 +15,9 @@
 #include "RedisClientImpl.h"
 #include "RedisTransactionImpl.h"
 #include "../../lib/src/TaskTimeoutFlag.h"
+
 using namespace drogon::nosql;
+
 std::shared_ptr<RedisClient> RedisClient::newRedisClient(
     const trantor::InetAddress &serverAddress,
     size_t connectionNumber,
@@ -48,23 +50,36 @@ RedisClientImpl::RedisClientImpl(const trantor::InetAddress &serverAddress,
 void RedisClientImpl::init()
 {
     loops_.start();
-    for (size_t i = 0; i < numberOfConnections_; ++i)
+    // Create an extra connection for subscription
+    for (size_t i = 0; i <= numberOfConnections_; ++i)
     {
         auto loop = loops_.getNextLoop();
-        loop->queueInLoop([this, loop]() {
+        loop->queueInLoop([this, i, loop]() {
             std::lock_guard<std::mutex> lock(connectionsMutex_);
-            connections_.insert(newConnection(loop));
+            connections_.insert(newConnection(loop, i == numberOfConnections_));
         });
     }
 }
-RedisConnectionPtr RedisClientImpl::newConnection(trantor::EventLoop *loop)
+
+RedisConnectionPtr RedisClientImpl::newConnection(trantor::EventLoop *loop,
+                                                  bool isSub)
 {
     auto conn =
         std::make_shared<RedisConnection>(serverAddr_, password_, db_, loop);
-    std::weak_ptr<RedisClientImpl> thisWeakPtr = shared_from_this();
-    conn->setConnectCallback([thisWeakPtr](RedisConnectionPtr &&conn) {
-        auto thisPtr = thisWeakPtr.lock();
-        if (thisPtr)
+    std::weak_ptr<RedisClientImpl> weakThis = shared_from_this();
+    conn->setConnectCallback([weakThis, isSub](RedisConnectionPtr &&conn) {
+        auto thisPtr = weakThis.lock();
+        if (!thisPtr)
+            return;
+        if (isSub)
+        {
+            {
+                std::lock_guard<std::mutex> lock(thisPtr->connectionsMutex_);
+                thisPtr->subscribeConnection_ = conn;
+            }
+            thisPtr->subscribeAll(conn);
+        }
+        else
         {
             {
                 std::lock_guard<std::mutex> lock(thisPtr->connectionsMutex_);
@@ -73,33 +88,38 @@ RedisConnectionPtr RedisClientImpl::newConnection(trantor::EventLoop *loop)
             thisPtr->handleNextTask(conn);
         }
     });
-    conn->setDisconnectCallback([thisWeakPtr](RedisConnectionPtr &&conn) {
+    conn->setDisconnectCallback([weakThis, isSub](RedisConnectionPtr &&conn) {
         // assert(status == REDIS_CONNECTED);
-        auto thisPtr = thisWeakPtr.lock();
-        if (thisPtr)
+        auto thisPtr = weakThis.lock();
+        if (!thisPtr)
+            return;
+        std::lock_guard<std::mutex> lock(thisPtr->connectionsMutex_);
+        thisPtr->connections_.erase(conn);
+        for (auto iter = thisPtr->readyConnections_.begin();
+             iter != thisPtr->readyConnections_.end();
+             ++iter)
         {
-            std::lock_guard<std::mutex> lock(thisPtr->connectionsMutex_);
-            thisPtr->connections_.erase(conn);
-            for (auto iter = thisPtr->readyConnections_.begin();
-                 iter != thisPtr->readyConnections_.end();
-                 ++iter)
+            if (*iter == conn)
             {
-                if (*iter == conn)
-                {
-                    thisPtr->readyConnections_.erase(iter);
-                    break;
-                }
+                thisPtr->readyConnections_.erase(iter);
+                break;
             }
-            auto loop = trantor::EventLoop::getEventLoopOfCurrentThread();
-            assert(loop);
-            loop->runAfter(2.0, [thisPtr, loop, conn]() {
-                thisPtr->connections_.insert(thisPtr->newConnection(loop));
-            });
         }
+        auto loop = trantor::EventLoop::getEventLoopOfCurrentThread();
+        assert(loop);
+        loop->runAfter(2.0, [thisPtr, loop, conn, isSub]() {
+            thisPtr->connections_.insert(thisPtr->newConnection(loop, isSub));
+        });
     });
-    conn->setIdleCallback([thisWeakPtr](const RedisConnectionPtr &connPtr) {
-        auto thisPtr = thisWeakPtr.lock();
-        if (thisPtr)
+    conn->setIdleCallback([weakThis, isSub](const RedisConnectionPtr &connPtr) {
+        auto thisPtr = weakThis.lock();
+        if (!thisPtr)
+            return;
+        if (isSub)
+        {
+            thisPtr->subscribeNext(connPtr);
+        }
+        else
         {
             thisPtr->handleNextTask(connPtr);
         }
@@ -179,6 +199,7 @@ RedisClientImpl::~RedisClientImpl()
         conn->disconnect();
     }
     readyConnections_.clear();
+    subscribeConnection_.reset();
     connections_.clear();
 }
 
@@ -405,4 +426,82 @@ void RedisClientImpl::execCommandAsyncWithTimeout(
         tasks_.emplace_back(bfCbPtr);
     }
     timeoutFlagPtr->runTimer();
+}
+
+void RedisClientImpl::subscribeAsync(RedisResultCallback &&resultCallback,
+                                     RedisExceptionCallback &&exceptionCallback,
+                                     RedisMessageCallback &&messageCallback,
+                                     const std::string &channel) noexcept
+{
+    // TODO: handle timeout
+
+    LOG_TRACE << "Subscribe " << channel;
+
+    auto callbacksPtr =
+        std::make_shared<SubscribeCallbacks>(std::move(resultCallback),
+                                             std::move(exceptionCallback),
+                                             std::move(messageCallback));
+    {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        if (allSubscribes_.find(channel) != allSubscribes_.end())
+        {
+            // TODO: maybe support dup?
+            callbacksPtr->exceptionCallback_(
+                RedisException(RedisErrorCode::kInternalError,
+                               "Duplicate subscribe"));
+            LOG_TRACE << "Stop duplicate subscription attempt to " << channel;
+            return;
+        }
+        allSubscribes_.emplace(channel, callbacksPtr);
+    }
+
+    RedisConnectionPtr connPtr;
+    {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        connPtr = subscribeConnection_;
+    }
+
+    if (connPtr)
+    {
+        connPtr->sendSubscribe(callbacksPtr, channel);
+    }
+    else
+    {
+        LOG_TRACE
+            << "no subscribe connection available, push command to buffer";
+        auto formattedCmd =
+            RedisConnection::getFormattedCommand("subscribe", channel.c_str());
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        subscribeTasks_.emplace_back(
+            std::make_shared<std::function<void(const RedisConnectionPtr &)>>(
+                [callbacksPtr, formattedCmd = std::move(formattedCmd)](
+                    const RedisConnectionPtr &connPtr) mutable {
+                    connPtr->sendFormattedSubscribe(std::move(formattedCmd),
+                                                    callbacksPtr);
+                }));
+    }
+}
+
+void RedisClientImpl::subscribeNext(const RedisConnectionPtr &connPtr)
+{
+    std::shared_ptr<std::function<void(const RedisConnectionPtr &)>> taskPtr;
+    {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        if (!subscribeTasks_.empty())
+        {
+            taskPtr = std::move(subscribeTasks_.front());
+            subscribeTasks_.pop_front();
+        }
+    }
+    if (taskPtr && (*taskPtr))
+    {
+        (*taskPtr)(connPtr);
+    }
+}
+
+void RedisClientImpl::subscribeAll(const RedisConnectionPtr &connPtr)
+{
+    // TODO: re-sub all after reconnect
+
+    // TODO: record channels that have been subscribed, maybe more callbacks
 }

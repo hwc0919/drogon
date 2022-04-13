@@ -34,6 +34,10 @@ class RedisTransactionImpl final
                           RedisExceptionCallback &&exceptionCallback,
                           string_view command,
                           ...) noexcept override;
+    void subscribeAsync(RedisResultCallback &&resultCallback,
+                        RedisExceptionCallback &&exceptionCallback,
+                        RedisMessageCallback &&subscribeCallback,
+                        const std::string &channel) noexcept override;
     std::shared_ptr<RedisTransaction> newTransaction() override
     {
         return shared_from_this();
