@@ -24,9 +24,16 @@ class SubscribeContext
 {
   public:
     static std::shared_ptr<SubscribeContext> newContext(
-        const std::weak_ptr<RedisSubscriber>& weakSub)
+        const std::weak_ptr<RedisSubscriber>& weakSub,
+        const std::string& channel)
     {
-        return std::shared_ptr<SubscribeContext>(new SubscribeContext(weakSub));
+        return std::shared_ptr<SubscribeContext>(
+            new SubscribeContext(weakSub, channel));
+    }
+
+    const std::string& channel() const
+    {
+        return channel_;
     }
 
     void addMessageCallback(RedisMessageCallback&& messageCallback)
@@ -64,13 +71,15 @@ class SubscribeContext
     }
 
   private:
-    explicit SubscribeContext(std::weak_ptr<RedisSubscriber> weakSub)
-        : weakSub_(std::move(weakSub))
+    explicit SubscribeContext(std::weak_ptr<RedisSubscriber> weakSub,
+                              std::string channel)
+        : channel_(std::move(channel)), weakSub_(std::move(weakSub))
     {
     }
-    std::list<RedisMessageCallback> messageCallbacks_;
+    std::string channel_;
     std::weak_ptr<RedisSubscriber> weakSub_;
     std::mutex mutex_;
+    std::list<RedisMessageCallback> messageCallbacks_;
     bool disabled_{false};
 };
 

@@ -44,7 +44,7 @@ void RedisSubscriberImpl::subscribeAsync(RedisMessageCallback &&messageCallback,
         }
         else
         {
-            subCtx = SubscribeContext::newContext(shared_from_this());
+            subCtx = SubscribeContext::newContext(shared_from_this(), channel);
             subscribes_.emplace(channel, subCtx);
         }
         subCtx->addMessageCallback(std::move(messageCallback));
@@ -60,7 +60,7 @@ void RedisSubscriberImpl::subscribeAsync(RedisMessageCallback &&messageCallback,
     LOG_INFO << "Subscribe command: " << command;
     if (connPtr)
     {
-        connPtr->sendSubscribe(std::move(command), subCtx);
+        connPtr->sendSubscribe(std::move(command), subCtx, true);
     }
     else
     {
@@ -71,13 +71,16 @@ void RedisSubscriberImpl::subscribeAsync(RedisMessageCallback &&messageCallback,
             std::make_shared<std::function<void(const RedisConnectionPtr &)>>(
                 [subCtx, command = std::move(command)](
                     const RedisConnectionPtr &connPtr) mutable {
-                    connPtr->sendSubscribe(std::move(command), subCtx);
+                    connPtr->sendSubscribe(std::move(command), subCtx, true);
                 }));
     }
 }
 
 void RedisSubscriberImpl::unsubscribe(const std::string &channel) noexcept
 {
+    LOG_TRACE << "Unsubscribe " << channel;
+
+    std::shared_ptr<SubscribeContext> subCtx;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto iter = subscribes_.find(channel);
@@ -87,11 +90,24 @@ void RedisSubscriberImpl::unsubscribe(const std::string &channel) noexcept
                       << channel;
             return;
         }
-        iter->second->disable();
+        subCtx = std::move(iter->second);
         subscribes_.erase(iter);
     }
+    subCtx->disable();
 
-    // TODO: exec subscribe command
+    RedisConnectionPtr connPtr;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        connPtr = conn_;
+    }
+    if (!connPtr)
+    {
+        LOG_DEBUG << "Connection unavailable, no need to send unsub command";
+        return;
+    }
+
+    std::string command = RedisConnection::formatUnsubscribeCommand(channel);
+    connPtr->sendSubscribe(std::move(command), subCtx, false);
 }
 
 void RedisSubscriberImpl::subscribeNext(const RedisConnectionPtr &connPtr)

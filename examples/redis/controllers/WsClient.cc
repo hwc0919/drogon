@@ -94,12 +94,11 @@ void WsClient::handleConnectionClosed(const WebSocketConnectionPtr& wsConnPtr)
 {
     LOG_INFO << "WsClient close connection from "
              << wsConnPtr->peerAddr().toIpPort();
-    // TODO: unsubscribe channels
-    auto context = wsConnPtr->getContext<ClientContext>();
-    for (auto& channel : context->channels_)
-    {
-        LOG_INFO << "Need to unsubscribe channel " << channel;
-        context->subscriber_->unsubscribe(channel);
-    }
+    // Channels will be auto unsubscribed when subscriber destructed.
+    // auto context = wsConnPtr->getContext<ClientContext>();
+    // for (auto& channel : context->channels_)
+    // {
+    //     context->subscriber_->unsubscribe(channel);
+    // }
     wsConnPtr->clearContext();
 }

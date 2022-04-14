@@ -24,7 +24,7 @@
 #include <hiredis/hiredis.h>
 #include <memory>
 #include <queue>
-#include <unordered_set>
+#include <unordered_map>
 
 #include "SubscribeContext.h"
 
@@ -92,6 +92,7 @@ class RedisConnection : public trantor::NonCopyable,
         return fullCommand;
     }
     static std::string formatSubscribeCommand(const std::string &channel);
+    static std::string formatUnsubscribeCommand(const std::string &channel);
     void sendFormattedCommand(std::string &&command,
                               RedisResultCallback &&resultCallback,
                               RedisExceptionCallback &&exceptionCallback)
@@ -150,7 +151,8 @@ class RedisConnection : public trantor::NonCopyable,
     }
 
     void sendSubscribe(std::string &&command,
-                       const std::shared_ptr<SubscribeContext> &subCtx);
+                       const std::shared_ptr<SubscribeContext> &subCtx,
+                       bool subscribe = true);
 
     ~RedisConnection()
     {
@@ -192,8 +194,9 @@ class RedisConnection : public trantor::NonCopyable,
     std::queue<RedisExceptionCallback> exceptionCallbacks_;
     ConnectStatus status_{ConnectStatus::kNone};
 
-    // TODO: get rid of the mutex, find another way to ensure context lifetime
-    std::unordered_set<std::shared_ptr<SubscribeContext>> subscribeContexts_;
+    // TODO: Can we find another way to ensure context lifetime
+    std::unordered_map<std::string, std::shared_ptr<SubscribeContext>>
+        subscribeContexts_;
     std::mutex subscribeMutex_;
 
     void startConnectionInLoop();
@@ -208,9 +211,11 @@ class RedisConnection : public trantor::NonCopyable,
     void sendCommandInLoop(const std::string &command,
                            RedisResultCallback &&resultCallback,
                            RedisExceptionCallback &&exceptionCallback);
-    void handleSubscribeResult(redisReply *result, SubscribeContext *subCtx);
     void sendSubscribeInLoop(const std::string &command,
-                             const std::shared_ptr<SubscribeContext> &subCtx);
+                             const std::shared_ptr<SubscribeContext> &subCtx,
+                             bool subscribe);
+    void handleSubscribeResult(redisReply *result, SubscribeContext *subCtx);
+    void handleUnsubscribeResult(redisReply *result, SubscribeContext *subCtx);
 
     void handleDisconnect();
 };
