@@ -341,6 +341,11 @@ void RedisConnection::sendSubscribeInLoop(
     const std::string &command,
     const std::shared_ptr<SubscribeContext> &subCtx)
 {
+    {
+        std::lock_guard<std::mutex> lock(subscribeMutex_);
+        subscribeContexts_.insert(subCtx);
+    }
+
     redisAsyncFormattedCommand(
         redisContext_,
         [](redisAsyncContext *context, void *r, void *subCtx) {
@@ -359,16 +364,22 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
 {
     if (!result)
     {
-        // TODO: ignore?
-        LOG_ERROR << "Subscribe callback receive empty result";
+        LOG_ERROR
+            << "Subscribe callback receive empty result (means disconnect?)";
     }
     else if (result->type == REDIS_REPLY_ERROR)
     {
-        // TODO: ignore?
         LOG_ERROR << "Subscribe callback receive error result: " << result->str;
     }
     else
     {
+        if (!subCtx->alive())
+        {
+            LOG_ERROR
+                << "Subscribe callback called, but context is no longer alive.";
+            return;
+        }
+
         assert(result->type == REDIS_REPLY_ARRAY && result->elements == 3);
         if (strcmp(result->element[0]->str, "subscribe") == 0)
         {
@@ -385,13 +396,10 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
         }
     }
 
-    if (resultCallbacks_.empty())
+    // TODO: not always need to call this
+    if (idleCallback_)
     {
-        assert(exceptionCallbacks_.empty());
-        if (idleCallback_)
-        {
-            idleCallback_(shared_from_this());
-        }
+        idleCallback_(shared_from_this());
     }
 }
 

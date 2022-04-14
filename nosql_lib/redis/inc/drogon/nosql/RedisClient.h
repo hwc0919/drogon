@@ -16,6 +16,7 @@
 #include <drogon/exports.h>
 #include <drogon/nosql/RedisResult.h>
 #include <drogon/nosql/RedisException.h>
+#include <drogon/nosql/RedisSubscriber.h>
 #include <drogon/utils/string_view.h>
 #include <trantor/net/InetAddress.h>
 #include <trantor/utils/Logger.h>
@@ -122,8 +123,14 @@ class DROGON_EXPORT RedisClient
                                   string_view command,
                                   ...) noexcept = 0;
 
-    virtual void subscribeAsync(RedisMessageCallback &&messageCallback,
-                                const std::string &channel) noexcept = 0;
+    /**
+     * @brief Create a subscriber for redis subscribe commands.
+     *
+     * @return std::shared_ptr<RedisSubscriber>
+     * @note This subscriber creates a new redis connection dedicated to
+     * subscribe commands. This connection is managed by RedisClient.
+     */
+    virtual std::shared_ptr<RedisSubscriber> newSubscriber() noexcept = 0;
 
     /**
      * @brief Create a redis transaction object.

@@ -24,6 +24,7 @@
 #include <hiredis/hiredis.h>
 #include <memory>
 #include <queue>
+#include <unordered_set>
 
 #include "SubscribeContext.h"
 
@@ -190,6 +191,11 @@ class RedisConnection : public trantor::NonCopyable,
     std::queue<RedisResultCallback> resultCallbacks_;
     std::queue<RedisExceptionCallback> exceptionCallbacks_;
     ConnectStatus status_{ConnectStatus::kNone};
+
+    // TODO: get rid of the mutex, find another way to ensure context lifetime
+    std::unordered_set<std::shared_ptr<SubscribeContext>> subscribeContexts_;
+    std::mutex subscribeMutex_;
+
     void startConnectionInLoop();
     static void addWrite(void *userData);
     static void delWrite(void *userData);

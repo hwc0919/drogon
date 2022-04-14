@@ -34,11 +34,10 @@ class RedisTransactionImpl final
                           RedisExceptionCallback &&exceptionCallback,
                           string_view command,
                           ...) noexcept override;
-    void subscribeAsync(RedisMessageCallback &&messageCallback,
-                        const std::string &channel) noexcept override
+    std::shared_ptr<RedisSubscriber> newSubscriber() noexcept override
     {
-        // TODO: shouldn't have this api. Change to Subscriber design.
-        LOG_ERROR << "RedisTransaction::subscribeAsync not implemented yet.";
+        // TODO
+        return nullptr;
     }
     std::shared_ptr<RedisTransaction> newTransaction() override
     {

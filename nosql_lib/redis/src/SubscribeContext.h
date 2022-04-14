@@ -16,21 +16,30 @@
 #include <drogon/nosql/RedisClient.h>
 #include <list>
 #include <mutex>
+#include <utility>
 
 namespace drogon::nosql
 {
 class SubscribeContext
 {
   public:
-    static std::shared_ptr<SubscribeContext> newContext()
+    static std::shared_ptr<SubscribeContext> newContext(
+        const std::weak_ptr<RedisSubscriber>& weakSub)
     {
-        return std::shared_ptr<SubscribeContext>(new SubscribeContext());
+        return std::shared_ptr<SubscribeContext>(new SubscribeContext(weakSub));
     }
 
     void addMessageCallback(RedisMessageCallback&& messageCallback)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         messageCallbacks_.emplace_back(std::move(messageCallback));
+    }
+
+    void disable()
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        disabled_ = true;
+        messageCallbacks_.clear();
     }
 
     void clear()
@@ -49,10 +58,20 @@ class SubscribeContext
         }
     }
 
+    bool alive() const
+    {
+        return !disabled_ && weakSub_.lock() != nullptr;
+    }
+
   private:
-    SubscribeContext() = default;
+    explicit SubscribeContext(std::weak_ptr<RedisSubscriber> weakSub)
+        : weakSub_(std::move(weakSub))
+    {
+    }
     std::list<RedisMessageCallback> messageCallbacks_;
+    std::weak_ptr<RedisSubscriber> weakSub_;
     std::mutex mutex_;
+    bool disabled_{false};
 };
 
 }  // namespace drogon::nosql

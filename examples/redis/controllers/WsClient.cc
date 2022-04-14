@@ -3,6 +3,12 @@
 #include <memory>
 #include <unordered_set>
 
+struct ClientContext
+{
+    std::unordered_set<std::string> channels_;
+    std::shared_ptr<nosql::RedisSubscriber> subscriber_;
+};
+
 void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
                                 std::string&& message,
                                 const WebSocketMessageType& type)
@@ -25,31 +31,52 @@ void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
     std::string channel = std::move(message);
     if (channel.empty())
     {
-        wsConnPtr->send("Channel not found");
-        wsConnPtr->shutdown();
+        wsConnPtr->send("Channel not provided");
         return;
     }
 
-    auto subChannels = wsConnPtr->getContext<std::unordered_set<std::string>>();
-    if (subChannels->find(channel) != subChannels->end())
+    bool subscribe = true;
+    if (channel.compare(0, 6, "unsub ") == 0)
     {
-        wsConnPtr->send("Already subscribed to channel " + channel);
-        return;
+        channel = channel.substr(6);
+        subscribe = false;
     }
 
-    drogon::app().getRedisClient()->subscribeAsync(
-        [channel, wsConnPtr](const std::string& subChannel,
-                             const std::string& subMessage) {
-            assert(subChannel == channel);
-            LOG_INFO << "Receive channel message " << subMessage;
-            std::string resp = "{\"channel\":\"" + subChannel +
-                               "\",\"message\":\"" + subMessage + "\"}";
-            wsConnPtr->send(resp);
-        },
-        channel);
+    auto context = wsConnPtr->getContext<ClientContext>();
 
-    subChannels->insert(channel);
-    wsConnPtr->send("Subscribe to channel: " + channel);
+    if (subscribe)
+    {
+        if (context->channels_.find(channel) != context->channels_.end())
+        {
+            wsConnPtr->send("Already subscribed to channel " + channel);
+            return;
+        }
+
+        context->subscriber_->subscribeAsync(
+            [channel, wsConnPtr](const std::string& subChannel,
+                                 const std::string& subMessage) {
+                assert(subChannel == channel);
+                LOG_INFO << "Receive channel message " << subMessage;
+                std::string resp = "{\"channel\":\"" + subChannel +
+                                   "\",\"message\":\"" + subMessage + "\"}";
+                wsConnPtr->send(resp);
+            },
+            channel);
+
+        context->channels_.insert(channel);
+        wsConnPtr->send("Subscribe to channel: " + channel);
+    }
+    else
+    {
+        if (context->channels_.find(channel) == context->channels_.end())
+        {
+            wsConnPtr->send("Channel not subscribed.");
+            return;
+        }
+        context->channels_.erase(channel);
+        context->subscriber_->unsubscribe(channel);
+        wsConnPtr->send("Unsubscribe from channel: " + channel);
+    }
 }
 
 void WsClient::handleNewConnection(const HttpRequestPtr&,
@@ -57,9 +84,10 @@ void WsClient::handleNewConnection(const HttpRequestPtr&,
 {
     LOG_INFO << "WsClient new connection from "
              << wsConnPtr->peerAddr().toIpPort();
-    std::shared_ptr<std::unordered_set<std::string>> subChannels =
-        std::make_shared<std::unordered_set<std::string>>();
-    wsConnPtr->setContext(subChannels);
+
+    std::shared_ptr<ClientContext> context = std::make_shared<ClientContext>();
+    context->subscriber_ = drogon::app().getRedisClient()->newSubscriber();
+    wsConnPtr->setContext(context);
 }
 
 void WsClient::handleConnectionClosed(const WebSocketConnectionPtr& wsConnPtr)
@@ -67,9 +95,11 @@ void WsClient::handleConnectionClosed(const WebSocketConnectionPtr& wsConnPtr)
     LOG_INFO << "WsClient close connection from "
              << wsConnPtr->peerAddr().toIpPort();
     // TODO: unsubscribe channels
-    auto subChannels = wsConnPtr->getContext<std::unordered_set<std::string>>();
-    for (auto& channel : *subChannels)
+    auto context = wsConnPtr->getContext<ClientContext>();
+    for (auto& channel : context->channels_)
     {
         LOG_INFO << "Need to unsubscribe channel " << channel;
+        context->subscriber_->unsubscribe(channel);
     }
+    wsConnPtr->clearContext();
 }
