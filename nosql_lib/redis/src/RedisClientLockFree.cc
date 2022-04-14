@@ -370,12 +370,3 @@ void RedisClientLockFree::execCommandAsyncWithTimeout(
     }
     timeoutFlagPtr->runTimer();
 }
-void RedisClientLockFree::subscribeAsync(
-    RedisResultCallback &&resultCallback,
-    RedisExceptionCallback &&exceptionCallback,
-    RedisMessageCallback &&subscribeCallback,
-    const std::string &channel) noexcept
-{
-    // TODO
-    LOG_ERROR << "RedisClientLockFree::subscribeAsync not implemented yet.";
-}

@@ -1,5 +1,8 @@
 #include "WsClient.h"
 
+#include <memory>
+#include <unordered_set>
+
 void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
                                 std::string&& message,
                                 const WebSocketMessageType& type)
@@ -27,17 +30,14 @@ void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
         return;
     }
 
+    auto subChannels = wsConnPtr->getContext<std::unordered_set<std::string>>();
+    if (subChannels->find(channel) != subChannels->end())
+    {
+        wsConnPtr->send("Already subscribed to channel " + channel);
+        return;
+    }
+
     drogon::app().getRedisClient()->subscribeAsync(
-        [channel, wsConnPtr](const nosql::RedisResult&) {
-            LOG_INFO << "Successfully Subscribed to " << channel;
-            wsConnPtr->send("SUBSCRIBE " + channel);
-        },
-        [channel, wsConnPtr](const nosql::RedisException& ex) {
-            LOG_ERROR << "Failed to subscribe to " << channel << ":"
-                      << ex.what();
-            wsConnPtr->send("FAILED TO SUBSCRIBE " + channel + ": " +
-                            ex.what());
-        },
         [channel, wsConnPtr](const std::string& subChannel,
                              const std::string& subMessage) {
             assert(subChannel == channel);
@@ -47,6 +47,9 @@ void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
             wsConnPtr->send(resp);
         },
         channel);
+
+    subChannels->insert(channel);
+    wsConnPtr->send("Subscribe to channel: " + channel);
 }
 
 void WsClient::handleNewConnection(const HttpRequestPtr&,
@@ -54,10 +57,19 @@ void WsClient::handleNewConnection(const HttpRequestPtr&,
 {
     LOG_INFO << "WsClient new connection from "
              << wsConnPtr->peerAddr().toIpPort();
+    std::shared_ptr<std::unordered_set<std::string>> subChannels =
+        std::make_shared<std::unordered_set<std::string>>();
+    wsConnPtr->setContext(subChannels);
 }
 
 void WsClient::handleConnectionClosed(const WebSocketConnectionPtr& wsConnPtr)
 {
     LOG_INFO << "WsClient close connection from "
              << wsConnPtr->peerAddr().toIpPort();
+    // TODO: unsubscribe channels
+    auto subChannels = wsConnPtr->getContext<std::unordered_set<std::string>>();
+    for (auto& channel : *subChannels)
+    {
+        LOG_INFO << "Need to unsubscribe channel " << channel;
+    }
 }

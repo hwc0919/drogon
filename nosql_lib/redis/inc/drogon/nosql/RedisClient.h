@@ -122,9 +122,7 @@ class DROGON_EXPORT RedisClient
                                   string_view command,
                                   ...) noexcept = 0;
 
-    virtual void subscribeAsync(RedisResultCallback &&resultCallback,
-                                RedisExceptionCallback &&exceptionCallback,
-                                RedisMessageCallback &&subscribeCallback,
+    virtual void subscribeAsync(RedisMessageCallback &&messageCallback,
                                 const std::string &channel) noexcept = 0;
 
     /**

@@ -41,10 +41,12 @@ class RedisClientLockFree final
                           RedisExceptionCallback &&exceptionCallback,
                           string_view command,
                           ...) noexcept override;
-    void subscribeAsync(RedisResultCallback &&resultCallback,
-                        RedisExceptionCallback &&exceptionCallback,
-                        RedisMessageCallback &&subscribeCallback,
-                        const std::string &channel) noexcept override;
+    void subscribeAsync(RedisMessageCallback &&messageCallback,
+                        const std::string &channel) noexcept override
+    {
+        // TODO: shouldn't have this api. Change to Subscriber design.
+        LOG_ERROR << "RedisClientLockFree::subscribeAsync not implemented yet.";
+    }
     ~RedisClientLockFree() override;
     RedisTransactionPtr newTransaction() override
     {

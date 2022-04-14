@@ -428,31 +428,27 @@ void RedisClientImpl::execCommandAsyncWithTimeout(
     timeoutFlagPtr->runTimer();
 }
 
-void RedisClientImpl::subscribeAsync(RedisResultCallback &&resultCallback,
-                                     RedisExceptionCallback &&exceptionCallback,
-                                     RedisMessageCallback &&messageCallback,
+void RedisClientImpl::subscribeAsync(RedisMessageCallback &&messageCallback,
                                      const std::string &channel) noexcept
 {
     // TODO: handle timeout
 
     LOG_TRACE << "Subscribe " << channel;
 
-    auto callbacksPtr =
-        std::make_shared<SubscribeCallbacks>(std::move(resultCallback),
-                                             std::move(exceptionCallback),
-                                             std::move(messageCallback));
+    std::shared_ptr<SubscribeContext> subCtx;
+    //    subCtx->addMessageCallback(std::move(messageCallback));
     {
         std::lock_guard<std::mutex> lock(connectionsMutex_);
         if (allSubscribes_.find(channel) != allSubscribes_.end())
         {
-            // TODO: maybe support dup?
-            callbacksPtr->exceptionCallback_(
-                RedisException(RedisErrorCode::kInternalError,
-                               "Duplicate subscribe"));
-            LOG_TRACE << "Stop duplicate subscription attempt to " << channel;
-            return;
+            subCtx = allSubscribes_.at(channel);
         }
-        allSubscribes_.emplace(channel, callbacksPtr);
+        else
+        {
+            subCtx = SubscribeContext::newContext();
+            allSubscribes_.emplace(channel, subCtx);
+        }
+        subCtx->addMessageCallback(std::move(messageCallback));
     }
 
     RedisConnectionPtr connPtr;
@@ -461,23 +457,22 @@ void RedisClientImpl::subscribeAsync(RedisResultCallback &&resultCallback,
         connPtr = subscribeConnection_;
     }
 
+    std::string command = RedisConnection::formatSubscribeCommand(channel);
+    LOG_INFO << "Subscribe command: " << command;
     if (connPtr)
     {
-        connPtr->sendSubscribe(callbacksPtr, channel);
+        connPtr->sendSubscribe(std::move(command), subCtx);
     }
     else
     {
         LOG_TRACE
             << "no subscribe connection available, push command to buffer";
-        auto formattedCmd =
-            RedisConnection::getFormattedCommand("subscribe", channel.c_str());
         std::lock_guard<std::mutex> lock(connectionsMutex_);
         subscribeTasks_.emplace_back(
             std::make_shared<std::function<void(const RedisConnectionPtr &)>>(
-                [callbacksPtr, formattedCmd = std::move(formattedCmd)](
+                [subCtx, command = std::move(command)](
                     const RedisConnectionPtr &connPtr) mutable {
-                    connPtr->sendFormattedSubscribe(std::move(formattedCmd),
-                                                    callbacksPtr);
+                    connPtr->sendSubscribe(std::move(command), subCtx);
                 }));
     }
 }

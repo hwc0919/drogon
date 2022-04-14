@@ -25,7 +25,7 @@
 #include <memory>
 #include <queue>
 
-#include "SubscribeCallbacks.h"
+#include "SubscribeContext.h"
 
 #define REDIS_CMD_SUBSCRIBE "subscribe"
 
@@ -90,16 +90,7 @@ class RedisConnection : public trantor::NonCopyable,
         free(cmd);
         return fullCommand;
     }
-    static std::string getFormattedCommand(string_view command,
-                                           ...) noexcept(false)
-    {
-        va_list args;
-        va_start(args, command);
-        std::string fullCommand = getFormattedCommand(command, args);
-        va_end(args);
-        LOG_INFO << "Full command: " << fullCommand;
-        return fullCommand;
-    }
+    static std::string formatSubscribeCommand(const std::string &channel);
     void sendFormattedCommand(std::string &&command,
                               RedisResultCallback &&resultCallback,
                               RedisExceptionCallback &&exceptionCallback)
@@ -157,12 +148,8 @@ class RedisConnection : public trantor::NonCopyable,
         }
     }
 
-    void sendSubscribe(const std::shared_ptr<SubscribeCallbacks> &callbacksPtr,
-                       const std::string &channel);
-
-    void sendFormattedSubscribe(
-        std::string &&command,
-        const std::shared_ptr<SubscribeCallbacks> &callbacksPtr);
+    void sendSubscribe(std::string &&command,
+                       const std::shared_ptr<SubscribeContext> &subCtx);
 
     ~RedisConnection()
     {
@@ -215,11 +202,9 @@ class RedisConnection : public trantor::NonCopyable,
     void sendCommandInLoop(const std::string &command,
                            RedisResultCallback &&resultCallback,
                            RedisExceptionCallback &&exceptionCallback);
-    void handleSubscribeResult(redisReply *result,
-                               SubscribeCallbacks *callbacks);
-    void sendSubscribeInLoop(
-        const std::string &command,
-        const std::shared_ptr<SubscribeCallbacks> &callbacksPtr);
+    void handleSubscribeResult(redisReply *result, SubscribeContext *subCtx);
+    void sendSubscribeInLoop(const std::string &command,
+                             const std::shared_ptr<SubscribeContext> &subCtx);
 
     void handleDisconnect();
 };

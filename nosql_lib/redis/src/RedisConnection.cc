@@ -321,99 +321,67 @@ void RedisConnection::disconnect()
 }
 
 void RedisConnection::sendSubscribe(
-    const std::shared_ptr<SubscribeCallbacks> &callbacksPtr,
-    const std::string &channel)
-{
-    LOG_TRACE << "redis command: SUBSCRIBE " << channel;
-    try
-    {
-        auto fullCommand =
-            getFormattedCommand(REDIS_CMD_SUBSCRIBE " %s", channel.c_str());
-        if (loop_->isInLoopThread())
-        {
-            sendSubscribeInLoop(fullCommand, callbacksPtr);
-        }
-        else
-        {
-            loop_->queueInLoop(
-                [this,
-                 callbacksPtr,
-                 fullCommand = std::move(fullCommand)]() mutable {
-                    sendSubscribeInLoop(fullCommand, callbacksPtr);
-                });
-        }
-    }
-    catch (const RedisException &err)
-    {
-        callbacksPtr->exceptionCallback_(err);
-        // TODO: Instead of notifying user, should we keep retrying?
-    }
-}
-
-void RedisConnection::sendFormattedSubscribe(
     std::string &&fullCommand,
-    const std::shared_ptr<SubscribeCallbacks> &callbacksPtr)
+    const std::shared_ptr<SubscribeContext> &subCtx)
 {
     if (loop_->isInLoopThread())
     {
-        sendSubscribeInLoop(fullCommand, callbacksPtr);
+        sendSubscribeInLoop(fullCommand, subCtx);
     }
     else
     {
-        loop_->queueInLoop([this,
-                            callbacksPtr,
-                            fullCommand = std::move(fullCommand)]() mutable {
-            sendSubscribeInLoop(fullCommand, callbacksPtr);
-        });
+        loop_->queueInLoop(
+            [this, subCtx, fullCommand = std::move(fullCommand)]() {
+                sendSubscribeInLoop(fullCommand, subCtx);
+            });
     }
 }
 
 void RedisConnection::sendSubscribeInLoop(
     const std::string &command,
-    const std::shared_ptr<SubscribeCallbacks> &callbacksPtr)
+    const std::shared_ptr<SubscribeContext> &subCtx)
 {
     redisAsyncFormattedCommand(
         redisContext_,
-        [](redisAsyncContext *context, void *r, void *callbacks) {
+        [](redisAsyncContext *context, void *r, void *subCtx) {
             auto thisPtr = static_cast<RedisConnection *>(context->ev.data);
             thisPtr->handleSubscribeResult(static_cast<redisReply *>(r),
-                                           static_cast<SubscribeCallbacks *>(
-                                               callbacks));
+                                           static_cast<SubscribeContext *>(
+                                               subCtx));
         },
-        callbacksPtr.get(),
+        subCtx.get(),
         command.c_str(),
         command.length());
 }
 
 void RedisConnection::handleSubscribeResult(redisReply *result,
-                                            SubscribeCallbacks *callbacks)
+                                            SubscribeContext *subCtx)
 {
     if (!result)
     {
-        callbacks->exceptionCallback_(
-            RedisException(RedisErrorCode::kConnectionBroken,
-                           "Network failure"));
+        // TODO: ignore?
+        LOG_ERROR << "Subscribe callback receive empty result";
     }
     else if (result->type == REDIS_REPLY_ERROR)
     {
-        callbacks->exceptionCallback_(
-            RedisException(RedisErrorCode::kRedisError,
-                           std::string{result->str, result->len}));
+        // TODO: ignore?
+        LOG_ERROR << "Subscribe callback receive error result: " << result->str;
     }
     else
     {
         assert(result->type == REDIS_REPLY_ARRAY && result->elements == 3);
-        if (strcmp(result->element[0]->str, "message") == 0)
+        if (strcmp(result->element[0]->str, "subscribe") == 0)
+        {
+            LOG_INFO << "Subscribe success, channel "
+                     << result->element[1]->str;
+        }
+        else
         {
             std::string channel(result->element[1]->str,
                                 result->element[1]->len);
             std::string message(result->element[2]->str,
                                 result->element[2]->len);
-            callbacks->messageCallback_(std::move(channel), std::move(message));
-        }
-        else
-        {
-            callbacks->resultCallback_(RedisResult(result));
+            subCtx->callMessageCallbacks(channel, message);
         }
     }
 
@@ -425,4 +393,38 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
             idleCallback_(shared_from_this());
         }
     }
+}
+
+std::string RedisConnection::formatSubscribeCommand(const std::string &channel)
+{
+    // Avoid using redisvFormatCommand, we don't want to emit unknown error
+    static const char *redisSubFmt =
+        "*2\r\n$9\r\nsubscribe\r\n$%zu\r\n%.*s\r\n";
+    std::string command;
+    if (channel.size() < 32)
+    {
+        char buf[64];
+        size_t bufSize = sizeof(buf);
+        int len = snprintf(buf,
+                           bufSize,
+                           redisSubFmt,
+                           channel.size(),
+                           (int)channel.size(),
+                           channel.c_str());
+        command = std::string(buf, len);
+    }
+    else
+    {
+        size_t bufSize = channel.size() + 64;
+        char *buf = static_cast<char *>(malloc(bufSize));
+        int len = snprintf(buf,
+                           bufSize,
+                           redisSubFmt,
+                           channel.size(),
+                           (int)channel.size(),
+                           channel.c_str());
+        command = std::string(buf, len);
+        free(buf);
+    }
+    return command;
 }

@@ -124,7 +124,7 @@ class DROGON_EXPORT RedisResult
 
 using RedisResultCallback = std::function<void(const RedisResult &)>;
 using RedisMessageCallback =
-    std::function<void(std::string &&channel, std::string &&message)>;
+    std::function<void(const std::string &channel, const std::string &message)>;
 
 }  // namespace nosql
 }  // namespace drogon

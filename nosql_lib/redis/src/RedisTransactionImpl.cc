@@ -125,12 +125,3 @@ RedisTransactionImpl::~RedisTransactionImpl()
     }
     LOG_TRACE << "transaction is destroyed";
 }
-void RedisTransactionImpl::subscribeAsync(
-    RedisResultCallback &&resultCallback,
-    RedisExceptionCallback &&exceptionCallback,
-    RedisMessageCallback &&subscribeCallback,
-    const std::string &channel) noexcept
-{
-    // TODO
-    LOG_ERROR << "RedisTransaction::subscribeAsync not implemented yet.";
-}

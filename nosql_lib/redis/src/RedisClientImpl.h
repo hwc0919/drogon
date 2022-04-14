@@ -14,7 +14,7 @@
 #pragma once
 
 #include "RedisConnection.h"
-#include "SubscribeCallbacks.h"
+#include "SubscribeContext.h"
 #include <drogon/nosql/RedisClient.h>
 #include <trantor/utils/NonCopyable.h>
 #include <trantor/net/EventLoopThreadPool.h>
@@ -41,9 +41,7 @@ class RedisClientImpl final
                           RedisExceptionCallback &&exceptionCallback,
                           string_view command,
                           ...) noexcept override;
-    void subscribeAsync(RedisResultCallback &&resultCallback,
-                        RedisExceptionCallback &&exceptionCallback,
-                        RedisMessageCallback &&subscribeCallback,
+    void subscribeAsync(RedisMessageCallback &&messageCallback,
                         const std::string &channel) noexcept override;
     ~RedisClientImpl() override;
     RedisTransactionPtr newTransaction() noexcept(false) override
@@ -87,7 +85,7 @@ class RedisClientImpl final
         tasks_;
     std::list<std::shared_ptr<std::function<void(const RedisConnectionPtr &)>>>
         subscribeTasks_;
-    std::unordered_map<std::string, std::shared_ptr<SubscribeCallbacks>>
+    std::unordered_map<std::string, std::shared_ptr<SubscribeContext>>
         allSubscribes_;
 
     RedisConnectionPtr newConnection(trantor::EventLoop *loop,
