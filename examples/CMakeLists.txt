@@ -25,7 +25,8 @@ drogon_create_views(login_session
 add_executable(jsonstore jsonstore/main.cc)
 
 add_executable(redis_simple redis/main.cc
-                            redis/controllers/Client.cc)
+                            redis/controllers/Client.cc
+                            redis/controllers/WsClient.cc)
 
 set(example_targets
     benchmark

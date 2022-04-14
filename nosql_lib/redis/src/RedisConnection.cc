@@ -328,7 +328,7 @@ void RedisConnection::sendSubscribe(
     try
     {
         auto fullCommand =
-            getFormattedCommand(REDIS_CMD_SUBSCRIBE, channel.c_str());
+            getFormattedCommand(REDIS_CMD_SUBSCRIBE " %s", channel.c_str());
         if (loop_->isInLoopThread())
         {
             sendSubscribeInLoop(fullCommand, callbacksPtr);

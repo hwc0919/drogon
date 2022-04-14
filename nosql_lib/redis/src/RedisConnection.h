@@ -97,6 +97,7 @@ class RedisConnection : public trantor::NonCopyable,
         va_start(args, command);
         std::string fullCommand = getFormattedCommand(command, args);
         va_end(args);
+        LOG_INFO << "Full command: " << fullCommand;
         return fullCommand;
     }
     void sendFormattedCommand(std::string &&command,
