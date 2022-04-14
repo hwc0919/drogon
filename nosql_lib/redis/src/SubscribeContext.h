@@ -36,6 +36,16 @@ class SubscribeContext
         return channel_;
     }
 
+    const std::string& subscribeCommand() const
+    {
+        return subscribeCommand_;
+    }
+
+    const std::string& unsubscribeCommand() const
+    {
+        return unsubscribeCommand_;
+    }
+
     void addMessageCallback(RedisMessageCallback&& messageCallback)
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -72,12 +82,12 @@ class SubscribeContext
 
   private:
     explicit SubscribeContext(std::weak_ptr<RedisSubscriber> weakSub,
-                              std::string channel)
-        : channel_(std::move(channel)), weakSub_(std::move(weakSub))
-    {
-    }
-    std::string channel_;
+                              std::string channel);
+
     std::weak_ptr<RedisSubscriber> weakSub_;
+    std::string channel_;
+    std::string subscribeCommand_;
+    std::string unsubscribeCommand_;
     std::mutex mutex_;
     std::list<RedisMessageCallback> messageCallbacks_;
     bool disabled_{false};

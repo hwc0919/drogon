@@ -425,6 +425,7 @@ if (BUILD_REDIS)
             nosql_lib/redis/src/RedisConnection.cc
             nosql_lib/redis/src/RedisResult.cc
             nosql_lib/redis/src/RedisTransactionImpl.cc
+            nosql_lib/redis/src/SubscribeContext.cc
             nosql_lib/redis/src/RedisSubscriberImpl.cc)
         set(private_headers
             ${private_headers}

@@ -28,8 +28,6 @@
 
 #include "SubscribeContext.h"
 
-#define REDIS_CMD_SUBSCRIBE "subscribe"
-
 namespace drogon
 {
 namespace nosql
@@ -91,8 +89,6 @@ class RedisConnection : public trantor::NonCopyable,
         free(cmd);
         return fullCommand;
     }
-    static std::string formatSubscribeCommand(const std::string &channel);
-    static std::string formatUnsubscribeCommand(const std::string &channel);
     void sendFormattedCommand(std::string &&command,
                               RedisResultCallback &&resultCallback,
                               RedisExceptionCallback &&exceptionCallback)
@@ -150,8 +146,7 @@ class RedisConnection : public trantor::NonCopyable,
         }
     }
 
-    void sendSubscribe(std::string &&command,
-                       const std::shared_ptr<SubscribeContext> &subCtx,
+    void sendSubscribe(const std::shared_ptr<SubscribeContext> &subCtx,
                        bool subscribe = true);
 
     ~RedisConnection()
@@ -194,10 +189,9 @@ class RedisConnection : public trantor::NonCopyable,
     std::queue<RedisExceptionCallback> exceptionCallbacks_;
     ConnectStatus status_{ConnectStatus::kNone};
 
-    // TODO: Can we find another way to ensure context lifetime
+    // be sure to access it inside loop, or a mutex will be needed.
     std::unordered_map<std::string, std::shared_ptr<SubscribeContext>>
         subscribeContexts_;
-    std::mutex subscribeMutex_;
 
     void startConnectionInLoop();
     static void addWrite(void *userData);
@@ -211,8 +205,7 @@ class RedisConnection : public trantor::NonCopyable,
     void sendCommandInLoop(const std::string &command,
                            RedisResultCallback &&resultCallback,
                            RedisExceptionCallback &&exceptionCallback);
-    void sendSubscribeInLoop(const std::string &command,
-                             const std::shared_ptr<SubscribeContext> &subCtx,
+    void sendSubscribeInLoop(const std::shared_ptr<SubscribeContext> &subCtx,
                              bool subscribe);
     void handleSubscribeResult(redisReply *result, SubscribeContext *subCtx);
     void handleUnsubscribeResult(redisReply *result, SubscribeContext *subCtx);

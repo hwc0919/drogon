@@ -321,25 +321,22 @@ void RedisConnection::disconnect()
 }
 
 void RedisConnection::sendSubscribe(
-    std::string &&fullCommand,
     const std::shared_ptr<SubscribeContext> &subCtx,
     bool subscribe)
 {
     if (loop_->isInLoopThread())
     {
-        sendSubscribeInLoop(fullCommand, subCtx, subscribe);
+        sendSubscribeInLoop(subCtx, subscribe);
     }
     else
     {
-        loop_->queueInLoop(
-            [this, subCtx, subscribe, fullCommand = std::move(fullCommand)]() {
-                sendSubscribeInLoop(fullCommand, subCtx, subscribe);
-            });
+        loop_->queueInLoop([this, subCtx, subscribe]() {
+            sendSubscribeInLoop(subCtx, subscribe);
+        });
     }
 }
 
 void RedisConnection::sendSubscribeInLoop(
-    const std::string &command,
     const std::shared_ptr<SubscribeContext> &subCtx,
     bool subscribe)
 {
@@ -350,12 +347,7 @@ void RedisConnection::sendSubscribeInLoop(
             // Unsub-ed by somewhere else
             return;
         }
-
-        {
-            std::lock_guard<std::mutex> lock(subscribeMutex_);
-            subscribeContexts_.emplace(subCtx->channel(), subCtx);
-        }
-
+        subscribeContexts_.emplace(subCtx->channel(), subCtx);
         redisAsyncFormattedCommand(
             redisContext_,
             [](redisAsyncContext *context, void *r, void *subCtx) {
@@ -365,15 +357,18 @@ void RedisConnection::sendSubscribeInLoop(
                                                    subCtx));
             },
             subCtx.get(),
-            command.c_str(),
-            command.length());
+            subCtx->subscribeCommand().c_str(),
+            subCtx->subscribeCommand().size());
     }
     else
     {
         // There is a Hiredis issue here
         // handleUnsubscribeResult() may not be called, and
         // handleSubscribeResult() may be called instead, with
-        // first element in result as "unsubscribe"
+        // first element in result as "unsubscribe".
+        // This problem is fixed in 2021-12-02 commit da5a4ff, but have not been
+        // released as a tag.
+        // For now, we have to deal with unsub logic in both callbacks.
         redisAsyncFormattedCommand(
             redisContext_,
             [](redisAsyncContext *context, void *r, void *subCtx) {
@@ -382,9 +377,9 @@ void RedisConnection::sendSubscribeInLoop(
                     static_cast<redisReply *>(r),
                     static_cast<SubscribeContext *>(subCtx));
             },
-            subCtx.get(),  // TODO: don't need this
-            command.c_str(),
-            command.length());
+            subCtx.get(),
+            subCtx->unsubscribeCommand().c_str(),
+            subCtx->unsubscribeCommand().size());
     }
 }
 
@@ -403,7 +398,7 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
     else
     {
         assert(result->type == REDIS_REPLY_ARRAY && result->elements == 3);
-        if (strcmp(result->element[0]->str, "message") == 0)
+        if (strcasecmp(result->element[0]->str, "message") == 0)
         {
             std::string channel(result->element[1]->str,
                                 result->element[1]->len);
@@ -415,9 +410,13 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
                              "longer alive"
                           << ", channel: " << channel
                           << ", message: " << message;
-                return;
             }
-            subCtx->callMessageCallbacks(channel, message);
+            else
+            {
+                subCtx->callMessageCallbacks(channel, message);
+            }
+            // Message callback, no need to call idleCallback_
+            return;
         }
         else if (strcmp(result->element[0]->str, "subscribe") == 0)
         {
@@ -431,7 +430,6 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
             std::string channel(result->element[1]->str,
                                 result->element[1]->len);
             LOG_INFO << "Unsubscribe success, channel " << channel;
-            std::lock_guard<std::mutex> lock(subscribeMutex_);
             subscribeContexts_.erase(channel);
         }
         else
@@ -440,7 +438,6 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
         }
     }
 
-    // TODO: not always need to call this
     if (idleCallback_)
     {
         idleCallback_(shared_from_this());
@@ -472,83 +469,11 @@ void RedisConnection::handleUnsubscribeResult(redisReply *result,
             LOG_ERROR
                 << "Unsubscribe callback called, but context is still alive";
         }
-
-        std::lock_guard<std::mutex> lock(subscribeMutex_);
         subscribeContexts_.erase(channel);
     }
 
-    // TODO: not always need to call this
     if (idleCallback_)
     {
         idleCallback_(shared_from_this());
     }
-}
-
-std::string RedisConnection::formatSubscribeCommand(const std::string &channel)
-{
-    // Avoid using redisvFormatCommand, we don't want to emit unknown error
-    static const char *redisSubFmt =
-        "*2\r\n$9\r\nsubscribe\r\n$%zu\r\n%.*s\r\n";
-    std::string command;
-    if (channel.size() < 32)
-    {
-        char buf[64];
-        size_t bufSize = sizeof(buf);
-        int len = snprintf(buf,
-                           bufSize,
-                           redisSubFmt,
-                           channel.size(),
-                           (int)channel.size(),
-                           channel.c_str());
-        command = std::string(buf, len);
-    }
-    else
-    {
-        size_t bufSize = channel.size() + 64;
-        char *buf = static_cast<char *>(malloc(bufSize));
-        int len = snprintf(buf,
-                           bufSize,
-                           redisSubFmt,
-                           channel.size(),
-                           (int)channel.size(),
-                           channel.c_str());
-        command = std::string(buf, len);
-        free(buf);
-    }
-    return command;
-}
-
-std::string RedisConnection::formatUnsubscribeCommand(
-    const std::string &channel)
-{
-    // Avoid using redisvFormatCommand, we don't want to emit unknown error
-    static const char *redisSubFmt =
-        "*2\r\n$11\r\nunsubscribe\r\n$%zu\r\n%.*s\r\n";
-    std::string command;
-    if (channel.size() < 32)
-    {
-        char buf[64];
-        size_t bufSize = sizeof(buf);
-        int len = snprintf(buf,
-                           bufSize,
-                           redisSubFmt,
-                           channel.size(),
-                           (int)channel.size(),
-                           channel.c_str());
-        command = std::string(buf, len);
-    }
-    else
-    {
-        size_t bufSize = channel.size() + 64;
-        char *buf = static_cast<char *>(malloc(bufSize));
-        int len = snprintf(buf,
-                           bufSize,
-                           redisSubFmt,
-                           channel.size(),
-                           (int)channel.size(),
-                           channel.c_str());
-        command = std::string(buf, len);
-        free(buf);
-    }
-    return command;
 }

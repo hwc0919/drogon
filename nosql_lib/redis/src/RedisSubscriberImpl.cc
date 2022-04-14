@@ -56,23 +56,14 @@ void RedisSubscriberImpl::subscribeAsync(RedisMessageCallback &&messageCallback,
         connPtr = conn_;
     }
 
-    std::string command = RedisConnection::formatSubscribeCommand(channel);
-    LOG_INFO << "Subscribe command: " << command;
     if (connPtr)
     {
-        connPtr->sendSubscribe(std::move(command), subCtx, true);
+        connPtr->sendSubscribe(subCtx, true);
     }
     else
     {
-        LOG_TRACE
-            << "no subscribe connection available, push command to buffer";
-        std::lock_guard<std::mutex> lock(mutex_);
-        tasks_.emplace_back(
-            std::make_shared<std::function<void(const RedisConnectionPtr &)>>(
-                [subCtx, command = std::move(command)](
-                    const RedisConnectionPtr &connPtr) mutable {
-                    connPtr->sendSubscribe(std::move(command), subCtx, true);
-                }));
+        LOG_TRACE << "no subscribe connection available, wait for connection";
+        // Just wait for connection, all channels will be re-sub
     }
 }
 
@@ -106,27 +97,40 @@ void RedisSubscriberImpl::unsubscribe(const std::string &channel) noexcept
         return;
     }
 
-    std::string command = RedisConnection::formatUnsubscribeCommand(channel);
-    connPtr->sendSubscribe(std::move(command), subCtx, false);
+    connPtr->sendSubscribe(subCtx, false);
 }
 
-void RedisSubscriberImpl::subscribeNext(const RedisConnectionPtr &connPtr)
+void RedisSubscriberImpl::subscribeNext()
 {
+    RedisConnectionPtr connPtr;
     std::shared_ptr<std::function<void(const RedisConnectionPtr &)>> taskPtr;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!tasks_.empty())
+        if (!conn_ || tasks_.empty())
         {
-            taskPtr = std::move(tasks_.front());
-            tasks_.pop_front();
+            return;
         }
+        connPtr = conn_;
+        taskPtr = std::move(tasks_.front());
+        tasks_.pop_front();
     }
-    if (taskPtr && (*taskPtr))
-    {
-        (*taskPtr)(connPtr);
-    }
+    (*taskPtr)(connPtr);
 }
 
 void RedisSubscriberImpl::subscribeAll()
 {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto &item : subscribes_)
+        {
+            auto subCtx = item.second;
+            tasks_.emplace_back(
+                std::make_shared<
+                    std::function<void(const RedisConnectionPtr &)>>(
+                    [subCtx](const RedisConnectionPtr &connPtr) mutable {
+                        connPtr->sendSubscribe(subCtx, true);
+                    }));
+        }
+    }
+    subscribeNext();
 }

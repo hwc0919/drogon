@@ -164,7 +164,7 @@ RedisConnectionPtr RedisClientImpl::newConnection(
             auto subPtr = weakSub.lock();
             if (!subPtr)
                 return;
-            subPtr->subscribeNext(connPtr);
+            subPtr->subscribeNext();
         });
     return conn;
 }

@@ -41,7 +41,7 @@ class RedisSubscriberImpl
         std::lock_guard<std::mutex> lock(mutex_);
         conn_ = conn;
     }
-    void subscribeNext(const RedisConnectionPtr &connPtr);
+    void subscribeNext();
     void subscribeAll();
 
   private:
