@@ -43,6 +43,7 @@ class RedisClientImpl final
                           string_view command,
                           ...) noexcept override;
     ~RedisClientImpl() override;
+    std::shared_ptr<RedisSubscriber> newSubscriber() noexcept override;
     RedisTransactionPtr newTransaction() noexcept(false) override
     {
         std::promise<RedisTransactionPtr> prom;
@@ -59,7 +60,6 @@ class RedisClientImpl final
         }
         return trans;
     }
-    std::shared_ptr<RedisSubscriber> newSubscriber() noexcept override;
     void newTransactionAsync(
         const std::function<void(const RedisTransactionPtr &)> &callback)
         override;
@@ -84,7 +84,7 @@ class RedisClientImpl final
         tasks_;
 
     RedisConnectionPtr newConnection(trantor::EventLoop *loop);
-    RedisConnectionPtr newConnection(
+    RedisConnectionPtr newSubscribeConnection(
         trantor::EventLoop *loop,
         const std::shared_ptr<RedisSubscriberImpl> &subscriber);
 

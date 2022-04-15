@@ -112,14 +112,14 @@ RedisConnectionPtr RedisClientImpl::newConnection(trantor::EventLoop *loop)
     return conn;
 }
 
-RedisConnectionPtr RedisClientImpl::newConnection(
+RedisConnectionPtr RedisClientImpl::newSubscribeConnection(
     trantor::EventLoop *loop,
     const std::shared_ptr<RedisSubscriberImpl> &subscriber)
 {
     auto conn =
         std::make_shared<RedisConnection>(serverAddr_, password_, db_, loop);
-    std::weak_ptr<RedisSubscriberImpl> weakSub(subscriber);
     std::weak_ptr<RedisClientImpl> weakThis = shared_from_this();
+    std::weak_ptr<RedisSubscriberImpl> weakSub(subscriber);
     conn->setConnectCallback([weakThis, weakSub](RedisConnectionPtr &&conn) {
         auto thisPtr = weakThis.lock();
         if (!thisPtr)
@@ -151,9 +151,10 @@ RedisConnectionPtr RedisClientImpl::newConnection(
 
         auto loop = trantor::EventLoop::getEventLoopOfCurrentThread();
         assert(loop);
-        loop->runAfter(2.0, [thisPtr, loop, conn, subPtr]() {
+        loop->runAfter(2.0, [thisPtr, loop, subPtr]() {
             std::lock_guard<std::mutex> lock(thisPtr->connectionsMutex_);
-            thisPtr->connections_.insert(thisPtr->newConnection(loop, subPtr));
+            thisPtr->connections_.insert(
+                thisPtr->newSubscribeConnection(loop, subPtr));
         });
     });
     conn->setIdleCallback([weakThis, weakSub](const RedisConnectionPtr &) {
@@ -474,7 +475,7 @@ std::shared_ptr<RedisSubscriber> RedisClientImpl::newSubscriber() noexcept
     auto loop = loops_.getNextLoop();
     loop->queueInLoop([this, loop, subscriber]() {
         std::lock_guard<std::mutex> lock(connectionsMutex_);
-        connections_.insert(newConnection(loop, subscriber));
+        connections_.insert(newSubscribeConnection(loop, subscriber));
     });
 
     return subscriber;
