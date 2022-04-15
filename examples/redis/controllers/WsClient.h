@@ -16,5 +16,6 @@ class WsClient : public drogon::WebSocketController<WsClient>
         const WebSocketConnectionPtr &) override;
     WS_PATH_LIST_BEGIN
     WS_PATH_ADD("/sub");
+    WS_PATH_ADD("/pub");
     WS_PATH_LIST_END
 };

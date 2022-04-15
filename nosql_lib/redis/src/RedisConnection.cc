@@ -407,7 +407,7 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
                                 result->element[2]->len);
             if (!subCtx->alive())
             {
-                LOG_INFO
+                LOG_DEBUG
                     << "Subscribe callback receive message, but context is no "
                        "longer alive"
                     << ", channel: " << channel << ", message: " << message;
@@ -426,15 +426,15 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
         // On channel subscribed
         if (strcmp(result->element[0]->str, "subscribe") == 0)
         {
-            LOG_INFO << "Subscribe success to [" << channel << "], total "
-                     << number;
+            LOG_DEBUG << "Subscribe success to [" << channel << "], total "
+                      << number;
             subCtx->onSubscribe();
         }
         // On channel unsubscribed
         else if (strcmp(result->element[0]->str, "unsubscribe") == 0)
         {
-            LOG_INFO << "Unsubscribe success from [" << channel << "], total "
-                     << number;
+            LOG_DEBUG << "Unsubscribe success from [" << channel << "], total "
+                      << number;
             subCtx->onUnsubscribe();
         }
         // Should not happen

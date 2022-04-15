@@ -94,7 +94,7 @@ void RedisSubscriberImpl::unsubscribe(const std::string &channel) noexcept
     }
     if (!connPtr)
     {
-        LOG_DEBUG << "Connection unavailable, no need to send unsub command";
+        LOG_TRACE << "Connection unavailable, no need to send unsub command";
         return;
     }
 

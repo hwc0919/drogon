@@ -13,8 +13,6 @@ void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
                                 std::string&& message,
                                 const WebSocketMessageType& type)
 {
-    LOG_INFO << "WsClient new message from "
-             << wsConnPtr->peerAddr().toIpPort();
     if (type == WebSocketMessageType::Ping ||
         type == WebSocketMessageType::Pong ||
         type == WebSocketMessageType::Close)
@@ -25,6 +23,40 @@ void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
     if (type != WebSocketMessageType::Text)
     {
         LOG_ERROR << "Unsupported message type " << (int)type;
+        return;
+    }
+    LOG_DEBUG << "WsClient new message from "
+              << wsConnPtr->peerAddr().toIpPort();
+
+    auto context = wsConnPtr->getContext<ClientContext>();
+    if (!context)
+    {
+        auto pos = message.find(' ');
+        if (pos == std::string::npos)
+        {
+            wsConnPtr->send("Invalid publish message.");
+            return;
+        }
+
+        std::string channel = message.substr(0, pos);
+        std::string msg = message.substr(pos + 1);
+        LOG_INFO << "PUBLISH " << channel << " " << msg;
+
+        // Publisher
+        drogon::app().getRedisClient()->execCommandAsync(
+            [wsConnPtr](const nosql::RedisResult& result) {
+                std::string nSubs = std::to_string(result.asInteger());
+                LOG_INFO << "PUBLISH success to " << nSubs << " subscribers.";
+                wsConnPtr->send("PUBLISH success to " + nSubs +
+                                " subscribers.");
+            },
+            [wsConnPtr](const nosql::RedisException& ex) {
+                LOG_INFO << "PUBLISH failed, " << ex.what();
+                wsConnPtr->send(std::string("PUBLISH failed: ") + ex.what());
+            },
+            "PUBLISH %s %s",
+            channel.c_str(),
+            msg.c_str());
         return;
     }
 
@@ -41,8 +73,6 @@ void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
         channel = channel.substr(6);
         subscribe = false;
     }
-
-    auto context = wsConnPtr->getContext<ClientContext>();
 
     if (subscribe)
     {
@@ -79,21 +109,29 @@ void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
     }
 }
 
-void WsClient::handleNewConnection(const HttpRequestPtr&,
+void WsClient::handleNewConnection(const HttpRequestPtr& req,
                                    const WebSocketConnectionPtr& wsConnPtr)
 {
-    LOG_INFO << "WsClient new connection from "
-             << wsConnPtr->peerAddr().toIpPort();
-
-    std::shared_ptr<ClientContext> context = std::make_shared<ClientContext>();
-    context->subscriber_ = drogon::app().getRedisClient()->newSubscriber();
-    wsConnPtr->setContext(context);
+    if (req->getPath() == "/sub")
+    {
+        LOG_DEBUG << "WsClient new subscriber connection from "
+                  << wsConnPtr->peerAddr().toIpPort();
+        std::shared_ptr<ClientContext> context =
+            std::make_shared<ClientContext>();
+        context->subscriber_ = drogon::app().getRedisClient()->newSubscriber();
+        wsConnPtr->setContext(context);
+    }
+    else
+    {
+        LOG_DEBUG << "WsClient new publisher connection from "
+                  << wsConnPtr->peerAddr().toIpPort();
+    }
 }
 
 void WsClient::handleConnectionClosed(const WebSocketConnectionPtr& wsConnPtr)
 {
-    LOG_INFO << "WsClient close connection from "
-             << wsConnPtr->peerAddr().toIpPort();
+    LOG_DEBUG << "WsClient close connection from "
+              << wsConnPtr->peerAddr().toIpPort();
     // Channels will be auto unsubscribed when subscriber destructed.
     // auto context = wsConnPtr->getContext<ClientContext>();
     // for (auto& channel : context->channels_)
