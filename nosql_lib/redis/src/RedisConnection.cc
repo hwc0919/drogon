@@ -363,19 +363,18 @@ void RedisConnection::sendSubscribeInLoop(
     else
     {
         // There is a Hiredis issue here
-        // handleUnsubscribeResult() may not be called, and
-        // handleSubscribeResult() may be called instead, with
-        // first element in result as "unsubscribe".
-        // This problem is fixed in 2021-12-02 commit da5a4ff, but have not been
-        // released as a tag.
-        // For now, we have to deal with unsub logic in both callbacks.
+        // The un-sub callback will not be called, sub callback will be called
+        // instead, with first element in result as "unsubscribe".
+        // This problem is fixed in 2021-12-02 commit da5a4ff, but
+        // have not been released as a tag.
+        // Here we just register a same function to deal with both situation.
         redisAsyncFormattedCommand(
             redisContext_,
             [](redisAsyncContext *context, void *r, void *subCtx) {
                 auto thisPtr = static_cast<RedisConnection *>(context->ev.data);
-                thisPtr->handleUnsubscribeResult(
-                    static_cast<redisReply *>(r),
-                    static_cast<SubscribeContext *>(subCtx));
+                thisPtr->handleSubscribeResult(static_cast<redisReply *>(r),
+                                               static_cast<SubscribeContext *>(
+                                                   subCtx));
             },
             subCtx.get(),
             subCtx->unsubscribeCommand().c_str(),
@@ -388,8 +387,9 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
 {
     if (!result)
     {
-        LOG_ERROR
-            << "Subscribe callback receive empty result (means disconnect?)";
+        // When connection close, if a channel has been subscribed,
+        // this callback will be called with empty result.
+        LOG_DEBUG << "Empty result (connection lost)";
     }
     else if (result->type == REDIS_REPLY_ERROR)
     {
@@ -398,7 +398,9 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
     else
     {
         assert(result->type == REDIS_REPLY_ARRAY && result->elements == 3);
-        if (strcasecmp(result->element[0]->str, "message") == 0)
+
+        // On channel message
+        if (strcmp(result->element[0]->str, "message") == 0)
         {
             std::string channel(result->element[1]->str,
                                 result->element[1]->len);
@@ -406,10 +408,10 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
                                 result->element[2]->len);
             if (!subCtx->alive())
             {
-                LOG_ERROR << "Subscribe receive message, but context is no "
-                             "longer alive"
-                          << ", channel: " << channel
-                          << ", message: " << message;
+                LOG_INFO
+                    << "Subscribe callback receive message, but context is no "
+                       "longer alive"
+                    << ", channel: " << channel << ", message: " << message;
             }
             else
             {
@@ -418,58 +420,28 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
             // Message callback, no need to call idleCallback_
             return;
         }
-        else if (strcmp(result->element[0]->str, "subscribe") == 0)
+
+        std::string channel(result->element[1]->str, result->element[1]->len);
+        long long number = result->element[2]->integer;
+
+        // On channel subscribed
+        if (strcmp(result->element[0]->str, "subscribe") == 0)
         {
-            std::string channel(result->element[1]->str,
-                                result->element[1]->len);
-            LOG_INFO << "Subscribe success, channel " << channel;
+            LOG_INFO << "Subscribe success to [" << channel << "], total "
+                     << number;
         }
-        // Hiredis issue: the unsub callback doesn't work
+        // On channel unsubscribed
         else if (strcmp(result->element[0]->str, "unsubscribe") == 0)
         {
-            std::string channel(result->element[1]->str,
-                                result->element[1]->len);
-            LOG_INFO << "Unsubscribe success, channel " << channel;
+            LOG_INFO << "Unsubscribe success from [" << channel << "], total "
+                     << number;
             subscribeContexts_.erase(channel);
         }
+        // Should not happen
         else
         {
             LOG_ERROR << "Unknown redis response: " << result->element[0]->str;
         }
-    }
-
-    if (idleCallback_)
-    {
-        idleCallback_(shared_from_this());
-    }
-}
-
-void RedisConnection::handleUnsubscribeResult(redisReply *result,
-                                              SubscribeContext *subCtx)
-{
-    if (!result)
-    {
-        LOG_ERROR
-            << "Unsubscribe callback receive empty result (means disconnect?)";
-    }
-    else if (result->type == REDIS_REPLY_ERROR)
-    {
-        LOG_ERROR << "Unsubscribe callback receive error result: "
-                  << result->str;
-    }
-    else
-    {
-        assert(result->type == REDIS_REPLY_ARRAY && result->elements == 3 &&
-               strcmp(result->element[0]->str, "unsubscribe") == 0);
-
-        std::string channel(result->element[1]->str, result->element[1]->len);
-        assert(channel == subCtx->channel());
-        if (subCtx->alive())
-        {
-            LOG_ERROR
-                << "Unsubscribe callback called, but context is still alive";
-        }
-        subscribeContexts_.erase(channel);
     }
 
     if (idleCallback_)

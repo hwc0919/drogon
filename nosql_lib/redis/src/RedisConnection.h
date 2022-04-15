@@ -208,7 +208,6 @@ class RedisConnection : public trantor::NonCopyable,
     void sendSubscribeInLoop(const std::shared_ptr<SubscribeContext> &subCtx,
                              bool subscribe);
     void handleSubscribeResult(redisReply *result, SubscribeContext *subCtx);
-    void handleUnsubscribeResult(redisReply *result, SubscribeContext *subCtx);
 
     void handleDisconnect();
 };
