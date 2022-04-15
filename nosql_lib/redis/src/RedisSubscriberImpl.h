@@ -31,7 +31,7 @@ class RedisSubscriberImpl
   public:
     ~RedisSubscriberImpl() override;
 
-    void subscribeAsync(RedisMessageCallback &&messageCallback,
+    void subscribe(RedisMessageCallback &&messageCallback,
                         const std::string &channel) noexcept override;
 
     void unsubscribe(const std::string &channel) noexcept override;

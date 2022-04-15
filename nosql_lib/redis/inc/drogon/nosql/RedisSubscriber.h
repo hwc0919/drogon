@@ -21,8 +21,8 @@ namespace drogon::nosql
 class RedisSubscriber
 {
   public:
-    virtual void subscribeAsync(RedisMessageCallback &&messageCallback,
-                                const std::string &channel) noexcept = 0;
+    virtual void subscribe(RedisMessageCallback &&messageCallback,
+                           const std::string &channel) noexcept = 0;
 
     virtual void unsubscribe(const std::string &channel) noexcept = 0;
 

@@ -82,7 +82,7 @@ void WsClient::handleNewMessage(const WebSocketConnectionPtr& wsConnPtr,
             return;
         }
 
-        context->subscriber_->subscribeAsync(
+        context->subscriber_->subscribe(
             [channel, wsConnPtr](const std::string& subChannel,
                                  const std::string& subMessage) {
                 assert(subChannel == channel);

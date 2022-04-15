@@ -18,7 +18,7 @@ DROGON_TEST(RedisSubscriberTest)
     REQUIRE(redisClient != nullptr);
 
     auto subscriber = redisClient->newSubscriber();
-    subscriber->subscribeAsync(
+    subscriber->subscribe(
         [](const std::string &channel, const std::string &message) {
             ++nMsgRecv;
             LOG_INFO << "Channel test_sub receive " << nMsgRecv << " messages";
