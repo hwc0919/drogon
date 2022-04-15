@@ -30,6 +30,10 @@ class RedisSubscriber
      * @param messageCallback The callback is called when a message is received
      * from the channel.
      * @param channel The channel to subscribe to.
+     *
+     * @note: Subscribing to same channel multiple times is supported. All
+     * message callbacks will be called in subscription order.
+     * One unsubscribe() call will remove all callbacks.
      */
     virtual void subscribe(RedisMessageCallback &&messageCallback,
                            const std::string &channel) noexcept = 0;

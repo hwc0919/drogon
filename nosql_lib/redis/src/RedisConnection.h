@@ -24,7 +24,6 @@
 #include <hiredis/hiredis.h>
 #include <memory>
 #include <queue>
-#include <unordered_map>
 
 #include "SubscribeContext.h"
 
