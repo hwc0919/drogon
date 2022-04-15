@@ -19,7 +19,7 @@
 using namespace drogon::nosql;
 RedisConnection::RedisConnection(const trantor::InetAddress &serverAddress,
                                  const std::string &password,
-                                 const unsigned int db,
+                                 unsigned int db,
                                  trantor::EventLoop *loop)
     : serverAddr_(serverAddress), password_(password), db_(db), loop_(loop)
 {
@@ -347,7 +347,6 @@ void RedisConnection::sendSubscribeInLoop(
             // Unsub-ed by somewhere else
             return;
         }
-        subscribeContexts_.emplace(subCtx->channel(), subCtx);
         redisAsyncFormattedCommand(
             redisContext_,
             [](redisAsyncContext *context, void *r, void *subCtx) {
@@ -415,7 +414,7 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
             }
             else
             {
-                subCtx->callMessageCallbacks(channel, message);
+                subCtx->onMessage(channel, message);
             }
             // Message callback, no need to call idleCallback_
             return;
@@ -429,13 +428,14 @@ void RedisConnection::handleSubscribeResult(redisReply *result,
         {
             LOG_INFO << "Subscribe success to [" << channel << "], total "
                      << number;
+            subCtx->onSubscribe();
         }
         // On channel unsubscribed
         else if (strcmp(result->element[0]->str, "unsubscribe") == 0)
         {
             LOG_INFO << "Unsubscribe success from [" << channel << "], total "
                      << number;
-            subscribeContexts_.erase(channel);
+            subCtx->onUnsubscribe();
         }
         // Should not happen
         else

@@ -38,14 +38,14 @@ void RedisSubscriberImpl::subscribeAsync(RedisMessageCallback &&messageCallback,
     std::shared_ptr<SubscribeContext> subCtx;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (subscribes_.find(channel) != subscribes_.end())
+        if (subscribeContexts_.find(channel) != subscribeContexts_.end())
         {
-            subCtx = subscribes_.at(channel);
+            subCtx = subscribeContexts_.at(channel);
         }
         else
         {
             subCtx = SubscribeContext::newContext(shared_from_this(), channel);
-            subscribes_.emplace(channel, subCtx);
+            subscribeContexts_.emplace(channel, subCtx);
         }
         subCtx->addMessageCallback(std::move(messageCallback));
     }
@@ -74,15 +74,16 @@ void RedisSubscriberImpl::unsubscribe(const std::string &channel) noexcept
     std::shared_ptr<SubscribeContext> subCtx;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto iter = subscribes_.find(channel);
-        if (iter == subscribes_.end())
+        auto iter = subscribeContexts_.find(channel);
+        if (iter == subscribeContexts_.end())
         {
             LOG_DEBUG << "Attempt to unsubscribe from unknown channel "
                       << channel;
             return;
         }
         subCtx = std::move(iter->second);
-        subscribes_.erase(iter);
+        subscribeContexts_.erase(iter);
+        unsubContexts_.emplace(subCtx->channel(), subCtx);
     }
     subCtx->disable();
 
@@ -137,7 +138,7 @@ void RedisSubscriberImpl::subscribeAll()
 {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        for (auto &item : subscribes_)
+        for (auto &item : subscribeContexts_)
         {
             auto subCtx = item.second;
             tasks_.emplace_back(
@@ -149,4 +150,10 @@ void RedisSubscriberImpl::subscribeAll()
         }
     }
     subscribeNext();
+}
+
+void RedisSubscriberImpl::removeContext(const std::string &channel)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    unsubContexts_.erase(channel);
 }

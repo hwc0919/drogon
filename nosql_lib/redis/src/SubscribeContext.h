@@ -24,11 +24,11 @@ class SubscribeContext
 {
   public:
     static std::shared_ptr<SubscribeContext> newContext(
-        const std::weak_ptr<RedisSubscriber>& weakSub,
+        std::weak_ptr<RedisSubscriber>&& weakSub,
         const std::string& channel)
     {
         return std::shared_ptr<SubscribeContext>(
-            new SubscribeContext(weakSub, channel));
+            new SubscribeContext(std::move(weakSub), channel));
     }
 
     const std::string& channel() const
@@ -65,15 +65,9 @@ class SubscribeContext
         messageCallbacks_.clear();
     }
 
-    void callMessageCallbacks(const std::string& channel,
-                              const std::string& message)
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        for (auto& callback : messageCallbacks_)
-        {
-            callback(channel, message);
-        }
-    }
+    void onMessage(const std::string& channel, const std::string& message);
+    void onSubscribe();
+    void onUnsubscribe();
 
     bool alive() const
     {
@@ -81,8 +75,8 @@ class SubscribeContext
     }
 
   private:
-    explicit SubscribeContext(std::weak_ptr<RedisSubscriber> weakSub,
-                              std::string channel);
+    explicit SubscribeContext(std::weak_ptr<RedisSubscriber>&& weakSub,
+                              const std::string& channel);
 
     std::weak_ptr<RedisSubscriber> weakSub_;
     std::string channel_;

@@ -45,7 +45,7 @@ class RedisConnection : public trantor::NonCopyable,
   public:
     RedisConnection(const trantor::InetAddress &serverAddress,
                     const std::string &password,
-                    const unsigned int db,
+                    unsigned int db,
                     trantor::EventLoop *loop);
     void setConnectCallback(
         const std::function<void(std::shared_ptr<RedisConnection> &&)>
@@ -188,10 +188,6 @@ class RedisConnection : public trantor::NonCopyable,
     std::queue<RedisResultCallback> resultCallbacks_;
     std::queue<RedisExceptionCallback> exceptionCallbacks_;
     ConnectStatus status_{ConnectStatus::kNone};
-
-    // be sure to access it inside loop, or a mutex will be needed.
-    std::unordered_map<std::string, std::shared_ptr<SubscribeContext>>
-        subscribeContexts_;
 
     void startConnectionInLoop();
     static void addWrite(void *userData);

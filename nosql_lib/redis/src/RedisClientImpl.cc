@@ -156,16 +156,15 @@ RedisConnectionPtr RedisClientImpl::newConnection(
             thisPtr->connections_.insert(thisPtr->newConnection(loop, subPtr));
         });
     });
-    conn->setIdleCallback(
-        [weakThis, weakSub](const RedisConnectionPtr &connPtr) {
-            auto thisPtr = weakThis.lock();
-            if (!thisPtr)
-                return;
-            auto subPtr = weakSub.lock();
-            if (!subPtr)
-                return;
-            subPtr->subscribeNext();
-        });
+    conn->setIdleCallback([weakThis, weakSub](const RedisConnectionPtr &) {
+        auto thisPtr = weakThis.lock();
+        if (!thisPtr)
+            return;
+        auto subPtr = weakSub.lock();
+        if (!subPtr)
+            return;
+        subPtr->subscribeNext();
+    });
     return conn;
 }
 
