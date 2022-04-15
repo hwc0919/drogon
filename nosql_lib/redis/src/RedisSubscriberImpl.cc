@@ -31,7 +31,7 @@ RedisSubscriberImpl::~RedisSubscriberImpl()
 }
 
 void RedisSubscriberImpl::subscribe(RedisMessageCallback &&messageCallback,
-                                         const std::string &channel) noexcept
+                                    const std::string &channel) noexcept
 {
     LOG_TRACE << "Subscribe " << channel;
 

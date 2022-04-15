@@ -21,9 +21,26 @@ namespace drogon::nosql
 class RedisSubscriber
 {
   public:
+    /**
+     * @brief Subscribe to a channel. The subscriber will keep the channel
+     * subscribed, until unsubscribe() is called on this channel, or the
+     * subscriber or RedisClient who creates it no longer exists.
+     * This method will not block.
+     *
+     * @param messageCallback The callback is called when a message is received
+     * from the channel.
+     * @param channel The channel to subscribe to.
+     */
     virtual void subscribe(RedisMessageCallback &&messageCallback,
                            const std::string &channel) noexcept = 0;
 
+    /**
+     * @brief Unsubscribe from a channel. Once this function returns, the
+     * messageCallback registered through subscribe() will no longer be called.
+     * This method will not block.
+     *
+     * @param channel The channel to subscribe to.
+     */
     virtual void unsubscribe(const std::string &channel) noexcept = 0;
 
     virtual ~RedisSubscriber() = default;
