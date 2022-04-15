@@ -36,12 +36,13 @@ class RedisSubscriberImpl
 
     void unsubscribe(const std::string &channel) noexcept override;
 
-    void setConnection(const RedisConnectionPtr &conn)
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        conn_ = conn;
-    }
+    // Set a connected connection to subscriber.
+    void setConnection(const RedisConnectionPtr &conn);
+    // Clear connection and task queue.
+    void clearConnection();
+    // Subscribe next channel in task queue.
     void subscribeNext();
+    // Subscribe all channels.
     void subscribeAll();
 
   private:

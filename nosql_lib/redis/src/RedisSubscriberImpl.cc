@@ -100,6 +100,22 @@ void RedisSubscriberImpl::unsubscribe(const std::string &channel) noexcept
     connPtr->sendSubscribe(subCtx, false);
 }
 
+void RedisSubscriberImpl::setConnection(const RedisConnectionPtr &conn)
+{
+    assert(conn);
+    std::lock_guard<std::mutex> lock(mutex_);
+    assert(!conn_);
+    conn_ = conn;
+}
+
+void RedisSubscriberImpl::clearConnection()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    assert(conn_);
+    conn_ = nullptr;
+    tasks_.clear();
+}
+
 void RedisSubscriberImpl::subscribeNext()
 {
     RedisConnectionPtr connPtr;

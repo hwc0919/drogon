@@ -147,7 +147,7 @@ RedisConnectionPtr RedisClientImpl::newConnection(
         auto subPtr = weakSub.lock();
         if (!subPtr)
             return;
-        subPtr->setConnection(nullptr);
+        subPtr->clearConnection();
 
         auto loop = trantor::EventLoop::getEventLoopOfCurrentThread();
         assert(loop);
