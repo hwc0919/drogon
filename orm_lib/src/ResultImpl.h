@@ -45,6 +45,10 @@ class ResultImpl : public trantor::NonCopyable
         (void)column;
         return 0;
     }
+    virtual std::shared_ptr<void> rawResult() const
+    {
+        return nullptr;
+    }
     virtual ~ResultImpl()
     {
     }

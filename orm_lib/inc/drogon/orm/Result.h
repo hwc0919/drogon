@@ -125,6 +125,8 @@ class DROGON_EXPORT Result
      */
     unsigned long long insertId() const noexcept;
 
+    std::shared_ptr<void> rawResult() const noexcept;
+
 #ifdef _MSC_VER
     Result() = default;
 #endif

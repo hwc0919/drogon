@@ -81,6 +81,10 @@ class MysqlResultImpl : public ResultImpl
     virtual FieldSizeType getLength(SizeType row,
                                     RowSizeType column) const override;
     virtual unsigned long long insertId() const noexcept override;
+    virtual std::shared_ptr<void> rawResult() const override
+    {
+        return result_;
+    }
 
   private:
     const std::shared_ptr<MYSQL_RES> result_;

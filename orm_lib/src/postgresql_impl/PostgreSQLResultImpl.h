@@ -42,6 +42,10 @@ class PostgreSQLResultImpl : public ResultImpl
     virtual FieldSizeType getLength(SizeType row,
                                     RowSizeType column) const override;
     virtual int oid(RowSizeType column) const override;
+    virtual std::shared_ptr<void> rawResult() const override
+    {
+        return result_;
+    }
 
   private:
     std::shared_ptr<PGresult> result_;

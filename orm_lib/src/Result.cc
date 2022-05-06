@@ -175,6 +175,11 @@ int Result::oid(RowSizeType column) const noexcept
     return resultPtr_->oid(column);
 }
 
+std::shared_ptr<void> Result::rawResult() const noexcept
+{
+    return resultPtr_->rawResult();
+}
+
 Result &Result::operator=(const Result &r) noexcept
 {
     resultPtr_ = r.resultPtr_;
