@@ -373,6 +373,7 @@ void HttpServer::handleResponse(
                 return;
             }
         }
+        return;
     }
 
     conn->getLoop()->queueInLoop(
