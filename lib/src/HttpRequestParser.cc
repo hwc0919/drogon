@@ -447,23 +447,30 @@ void HttpRequestParser::pushRequestToPipelining(const HttpRequestPtr &req)
 }
 
 /**
- * @return current index of the response in the pipeline
+ * @return return true if have ready responses
  */
-size_t HttpRequestParser::pushResponseToPipelining(const HttpRequestPtr &req,
-                                                   const HttpResponsePtr &resp,
-                                                   bool isHeadMethod)
+bool HttpRequestParser::pushResponseToPipelining(const HttpRequestPtr &req,
+                                                 HttpResponsePtr resp,
+                                                 bool isHeadMethod)
 {
     assert(loop_->isInLoopThread());
-    for (size_t i = 0; i != requestPipelining_.size(); ++i)
+    assert(!requestPipelining_.empty());
+    if (req == requestPipelining_.front().first)
+    {
+        requestPipelining_.pop_front();
+        getResponseBuffer().emplace_back(std::move(resp), isHeadMethod);
+        return true;
+    }
+    for (size_t i = 1; i < requestPipelining_.size(); ++i)
     {
         if (requestPipelining_[i].first == req)
         {
             requestPipelining_[i].second = {resp, isHeadMethod};
-            return i;
+            return false;
         }
     }
-    assert(false);
-    return static_cast<size_t>(-1);
+    assert(false);  // should always find a match
+    return false;
 }
 
 /**

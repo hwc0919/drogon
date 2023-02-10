@@ -111,7 +111,7 @@ class HttpServer : trantor::NonCopyable
                          bool isHeadMethod);
     void handleResponse(const std::shared_ptr<CallbackParamPack> &paramPack,
                         const HttpResponsePtr &response,
-                        const std::shared_ptr<bool> &sendIfReady = nullptr);
+                        const std::shared_ptr<bool> &sendIfReady);
     void sendResponse(const trantor::TcpConnectionPtr &,
                       const HttpResponsePtr &,
                       bool isHeadMethod);

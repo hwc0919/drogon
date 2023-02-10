@@ -290,7 +290,7 @@ void HttpServer::onRequests(
         auto errResp = tryDecompressRequest(req);
         if (errResp)
         {
-            handleResponse(paramPack, errResp);
+            handleResponse(paramPack, errResp, sendIfReady);
             continue;
         }
         // Although the function has 'async' in its name, the handleResponse()
@@ -357,43 +357,56 @@ void HttpServer::handleResponse(
          * the requests were received. rfc2616-8.1.1.2
          */
         if (requestParser->pushResponseToPipelining(req,
-                                                    newResp,
-                                                    isHeadMethod) == 0)
+                                                    std::move(newResp),
+                                                    isHeadMethod))
         {
-            requestParser->popReadyResponse();
-            if (sendIfReady && *sendIfReady)
+            if (*sendIfReady)
             {
                 // We have passed the point where `onRequests()` sends
                 // responses. Here, we should send ready responses from the
                 // beginning of pipeline queue.
-                sendResponses(conn,
-                              requestParser->getResponseBuffer(),
-                              requestParser->getBuffer());
-                requestParser->getResponseBuffer().clear();
-                return;
-            }
-        }
-        return;
-    }
-
-    conn->getLoop()->queueInLoop(
-        [conn, req, newResp, this, isHeadMethod, requestParser]() {
-            if (!conn->connected())
-            {
-                return;
-            }
-            if (requestParser->pushResponseToPipelining(req,
-                                                        newResp,
-                                                        isHeadMethod) == 0)
-            {
-                // Send ready responses from the beginning of pipeline queue.
                 requestParser->popReadyResponse();
                 sendResponses(conn,
                               requestParser->getResponseBuffer(),
                               requestParser->getBuffer());
                 requestParser->getResponseBuffer().clear();
+                return;
             }
-        });
+            // else
+            //{
+            //  if reaches here, the response must have been generated
+            //  synchronously.
+            //  No need to call popReadyResponse() here, because if the first
+            //  response is not generated synchronously, it will never be ready
+            //  before the `sync-send-loop` ends.
+            //  By `sync-send-loop`, we mean the for loop in onRequests().
+            //}
+        }
+        return;
+    }
+
+    conn->getLoop()->queueInLoop([this,
+                                  conn,
+                                  req,
+                                  requestParser,
+                                  newResp = std::move(newResp),
+                                  isHeadMethod]() mutable {
+        if (!conn->connected())
+        {
+            return;
+        }
+        if (requestParser->pushResponseToPipelining(req,
+                                                    std::move(newResp),
+                                                    isHeadMethod))
+        {
+            // Send ready responses from the beginning of pipeline queue.
+            requestParser->popReadyResponse();
+            sendResponses(conn,
+                          requestParser->getResponseBuffer(),
+                          requestParser->getBuffer());
+            requestParser->getResponseBuffer().clear();
+        }
+    });
 }
 
 /**
@@ -416,13 +429,10 @@ inline bool HttpServer::passSyncAdvices(
             // Rejected by sync advice
             resp->setVersion(req->getVersion());
             resp->setCloseConnection(!req->keepAlive());
-            if (requestParser->pushResponseToPipelining(
-                    req,
-                    getCompressedResponse(req, resp, isHeadMethod),
-                    isHeadMethod) == 0)
-            {
-                requestParser->popReadyResponse();
-            }
+            requestParser->pushResponseToPipelining(
+                req,
+                getCompressedResponse(req, resp, isHeadMethod),
+                isHeadMethod);
             return false;
         }
     }
