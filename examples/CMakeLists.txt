@@ -31,6 +31,9 @@ add_executable(redis_simple redis/main.cc
 add_executable(redis_chat redis_chat/main.cc
                           redis_chat/controllers/Chat.cc)
 
+add_executable(error_pipeline error_pipeline/main.cc
+        error_pipeline/PipelineErrorController.cpp)
+
 set(example_targets
     benchmark
     client
@@ -41,7 +44,8 @@ set(example_targets
     login_session
     jsonstore
     redis_simple
-    redis_chat)
+    redis_chat
+    error_pipeline)
 
 # Add warnings for our example targets--some warnings (such as -Wunused-parameter) only appear
 # when the templated functions are instantiated at their point of use.
