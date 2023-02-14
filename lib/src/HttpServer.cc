@@ -69,7 +69,6 @@ static inline bool passSyncAdvices(
     const std::shared_ptr<HttpRequestParser> &requestParser,
     const std::vector<std::function<HttpResponsePtr(const HttpRequestPtr &)>>
         &syncAdvices,
-    bool shouldBePipelined,
     bool isHeadMethod);
 static inline HttpResponsePtr getCompressedResponse(
     const HttpRequestImplPtr &req,
@@ -275,15 +274,8 @@ void HttpServer::onRequests(
         {
             req->setMethod(Get);
         }
-        bool reqPipelined = false;
-        if (!requestParser->emptyPipelining())
-        {
-            requestParser->pushRequestToPipelining(req, isHeadMethod);
-            reqPipelined = true;
-        }
         if (hasSyncAdvices_ &&
-            !passSyncAdvices(
-                req, requestParser, syncAdvices_, reqPipelined, isHeadMethod))
+            !passSyncAdvices(req, requestParser, syncAdvices_, isHeadMethod))
         {
             continue;
         }
@@ -311,7 +303,7 @@ void HttpServer::onRequests(
                                                   respReadyPtr);
                                });
         }
-        if (!reqPipelined && !respReady)
+        if (!respReady)
         {
             requestParser->pushRequestToPipelining(req, isHeadMethod);
         }
@@ -369,6 +361,7 @@ void HttpServer::handleResponse(
         {
             // response must arrive synchronously
             assert(*loopFlagPtr);
+            // TODO: change to weakPtr to be sure. But may drop performance.
             *respReadyPtr = true;
             requestParser->getResponseBuffer().emplace_back(std::move(newResp),
                                                             isHeadMethod);
@@ -775,7 +768,6 @@ static inline bool passSyncAdvices(
     const std::shared_ptr<HttpRequestParser> &requestParser,
     const std::vector<std::function<HttpResponsePtr(const HttpRequestPtr &)>>
         &syncAdvices,
-    bool shouldBePipelined,
     bool isHeadMethod)
 {
     for (auto &advice : syncAdvices)
@@ -786,7 +778,7 @@ static inline bool passSyncAdvices(
             // Rejected by sync advice
             resp->setVersion(req->getVersion());
             resp->setCloseConnection(!req->keepAlive());
-            if (!shouldBePipelined)
+            if (requestParser->emptyPipelining())
             {
                 requestParser->getResponseBuffer().emplace_back(
                     getCompressedResponse(req, resp, isHeadMethod),
