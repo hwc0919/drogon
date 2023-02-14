@@ -434,17 +434,23 @@ void HttpServer::handleResponse(
     }
 }
 
-using CallbackParams = struct
+struct ChunkingParams
 {
-    std::function<std::size_t(char *, std::size_t)> dataCallback;
-    bool bFinished;
+    using DataCallback = std::function<std::size_t(char *, std::size_t)>;
+    explicit ChunkingParams(DataCallback cb) : dataCallback(std::move(cb))
+    {
+    }
+    DataCallback dataCallback;
+    bool bFinished{false};
 #ifndef NDEBUG  // defined by CMake for release build
-    std::size_t nDataReturned;
+    std::size_t nDataReturned{0};
 #endif
 };
-static std::size_t chunkingCallback(std::shared_ptr<CallbackParams> cbParams,
-                                    char *pBuffer,
-                                    std::size_t nSize)
+
+static std::size_t chunkingCallback(
+    const std::shared_ptr<ChunkingParams> &cbParams,
+    char *pBuffer,
+    std::size_t nSize)
 {
     if (!cbParams)
         return 0;
@@ -456,7 +462,6 @@ static std::size_t chunkingCallback(std::shared_ptr<CallbackParams> cbParams,
         {
             cbParams->dataCallback(pBuffer, nSize);
             cbParams->dataCallback = {};
-            cbParams.reset();
         }
         return 0;
     }
@@ -567,20 +572,11 @@ void HttpServer::sendResponse(const TcpConnectionPtr &conn,
                     (headers.at("transfer-encoding") == "chunked");
                 if (bChunked)
                 {
-                    auto chunkCallback =
-                        std::bind(chunkingCallback,
-                                  std::shared_ptr<CallbackParams>(
-                                      new CallbackParams{streamCallback,
-#ifndef NDEBUG  // defined by CMake for release build
-                                                         false,
-                                                         0}),
-#else
-                                                         false}),
-#endif
-
-                                  _1,
-                                  _2);
-                    conn->sendStream(chunkCallback);
+                    conn->sendStream(
+                        [ctx = std::make_shared<ChunkingParams>(
+                             streamCallback)](char *buffer, size_t len) {
+                            return chunkingCallback(ctx, buffer, len);
+                        });
                 }
                 else
                     conn->sendStream(streamCallback);
@@ -644,19 +640,11 @@ void HttpServer::sendResponses(
                         (headers.at("transfer-encoding") == "chunked");
                     if (bChunked)
                     {
-                        auto chunkCallback =
-                            std::bind(chunkingCallback,
-                                      std::shared_ptr<CallbackParams>(
-                                          new CallbackParams{streamCallback,
-#ifndef NDEBUG  // defined by CMake for release build
-                                                             false,
-                                                             0}),
-#else
-                                                             false}),
-#endif
-                                      _1,
-                                      _2);
-                        conn->sendStream(chunkCallback);
+                        conn->sendStream(
+                            [ctx = std::make_shared<ChunkingParams>(
+                                 streamCallback)](char *buffer, size_t len) {
+                                return chunkingCallback(ctx, buffer, len);
+                            });
                     }
                     else
                         conn->sendStream(streamCallback);
