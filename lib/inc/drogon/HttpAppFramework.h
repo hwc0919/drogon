@@ -19,6 +19,7 @@
 #include <drogon/CacheMap.h>
 #include <drogon/DrObject.h>
 #include <drogon/HttpBinder.h>
+#include <drogon/HttpBinderExceptFree.h>
 #include <drogon/HttpFilter.h>
 #include <drogon/MultiPart.h>
 #include <drogon/NotFound.h>
@@ -451,13 +452,9 @@ class DROGON_EXPORT HttpAppFramework : public trantor::NonCopyable
         const std::string &handlerName = "")
     {
         LOG_TRACE << "pathPattern:" << pathPattern;
-        auto binder = std::make_shared<internal::HttpBinder<FUNCTION>>(
-            std::forward<FUNCTION>(function));
-
-        getLoop()->queueInLoop([binder]() { binder->createHandlerInstance(); });
-
         std::vector<HttpMethod> validMethods;
         std::vector<std::string> filters;
+        bool isExceptFree{false};
         for (auto const &filterOrMethod : filtersAndMethods)
         {
             if (filterOrMethod.type() == internal::ConstraintType::HttpFilter)
@@ -469,12 +466,39 @@ class DROGON_EXPORT HttpAppFramework : public trantor::NonCopyable
             {
                 validMethods.push_back(filterOrMethod.getHttpMethod());
             }
+            else if (filterOrMethod.type() ==
+                     internal::ConstraintType::HandlerFeature)
+            {
+                isExceptFree =
+                    isExceptFree || filterOrMethod.getHandlerFeature() ==
+                                        HandlerFeature::ExceptFree;
+            }
             else
             {
                 LOG_ERROR << "Invalid controller constraint type";
                 exit(1);
             }
         }
+
+        internal::HttpBinderBasePtr binder;
+        if (isExceptFree)
+        {
+            auto httpBinder =
+                std::make_shared<internal::HttpBinderExceptFree<FUNCTION>>(
+                    std::forward<FUNCTION>(function));
+            getLoop()->queueInLoop(
+                [httpBinder]() { httpBinder->createHandlerInstance(); });
+            binder = httpBinder;
+        }
+        else
+        {
+            auto httpBinder = std::make_shared<internal::HttpBinder<FUNCTION>>(
+                std::forward<FUNCTION>(function));
+            getLoop()->queueInLoop(
+                [httpBinder]() { httpBinder->createHandlerInstance(); });
+            binder = httpBinder;
+        }
+
         registerHttpController(
             pathPattern, binder, validMethods, filters, handlerName);
         return *this;

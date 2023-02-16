@@ -151,6 +151,12 @@ enum HttpMethod
     Invalid
 };
 
+enum class HandlerFeature
+{
+    None = 0,
+    ExceptFree
+};
+
 enum class ReqResult
 {
     Ok = 0,

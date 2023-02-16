@@ -24,7 +24,8 @@ enum class ConstraintType
 {
     None,
     HttpMethod,
-    HttpFilter
+    HttpFilter,
+    HandlerFeature
 };
 
 class HttpConstraint
@@ -42,6 +43,10 @@ class HttpConstraint
         : type_(ConstraintType::HttpFilter), filterName_(filterName)
     {
     }
+    HttpConstraint(HandlerFeature feature)
+        : type_(ConstraintType::HandlerFeature), feature_(feature)
+    {
+    }
     ConstraintType type() const
     {
         return type_;
@@ -54,10 +59,14 @@ class HttpConstraint
     {
         return filterName_;
     }
-
+    HandlerFeature getHandlerFeature() const
+    {
+        return feature_;
+    }
   private:
     ConstraintType type_{ConstraintType::None};
     HttpMethod method_{HttpMethod::Invalid};
+    HandlerFeature feature_{HandlerFeature::None};
     std::string filterName_;
 };
 }  // namespace internal
