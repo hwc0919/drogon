@@ -305,6 +305,17 @@ HttpAppFramework &HttpAppFrameworkImpl::registerHttpSimpleController(
                                                             filtersAndMethods);
     return *this;
 }
+HttpAppFramework &HttpAppFrameworkImpl::registerHttpStreamController(
+    const std::string &pathName,
+    const std::string &ctrlName,
+    const std::vector<internal::HttpConstraint> &filtersAndMethods)
+{
+    assert(!routersInit_);
+    httpSimpleCtrlsRouterPtr_->registerHttpSimpleController(pathName,
+                                                            ctrlName,
+                                                            filtersAndMethods);
+    return *this;
+}
 
 void HttpAppFrameworkImpl::registerHttpController(
     const std::string &pathPattern,

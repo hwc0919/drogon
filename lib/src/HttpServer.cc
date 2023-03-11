@@ -24,6 +24,8 @@
 #include "HttpResponseImpl.h"
 #include "WebSocketConnectionImpl.h"
 
+#include <drogon/HttpStreamController.h>
+
 #if COZ_PROFILING
 #include <coz.h>
 #else
@@ -173,6 +175,33 @@ void HttpServer::onMessage(const TcpConnectionPtr &conn, MsgBuffer *buf)
         }
         if (parseRes == 0)
         {
+            if (requestParser->status() ==
+                HttpRequestParser::HttpRequestParseStatus::kExpectStreamBody)
+            {
+                std::weak_ptr<HttpRequestParser> weakParser{requestParser};
+                std::weak_ptr<TcpConnection> weakConn{conn};
+
+                HttpStreamControllerBase *ctrl;  // TODO
+                ctrl->onRequestHeaders(
+                    requestParser->requestImpl(),
+                    [weakParser, weakConn](const HttpResponsePtr &resp) {
+                        auto parser = weakParser.lock();
+                        auto conn = weakConn.lock();
+                        if (!parser || !conn)
+                        {
+                            return;
+                        }
+                        // Do not support pipelining here
+                        if (!parser->emptyPipelining())
+                        {
+                            conn->shutdown();
+                            return;
+                        }
+                        // how to handle response ?
+                    });
+                continue;
+                // The request is not complete, wait for the next message
+            }
             break;
         }
         auto &req = requestParser->requestImpl();

@@ -87,6 +87,11 @@ class HttpAppFrameworkImpl final : public HttpAppFramework
         const std::string &ctrlName,
         const std::vector<internal::HttpConstraint> &filtersAndMethods)
         override;
+    HttpAppFramework &registerHttpStreamController(
+        const std::string &pathName,
+        const std::string &ctrlName,
+        const std::vector<internal::HttpConstraint> &filtersAndMethods =
+            std::vector<internal::HttpConstraint>{}) override;
 
     HttpAppFramework &setCustom404Page(const HttpResponsePtr &resp,
                                        bool set404) override

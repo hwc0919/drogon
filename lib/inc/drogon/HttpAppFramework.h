@@ -414,6 +414,13 @@ class DROGON_EXPORT HttpAppFramework : public trantor::NonCopyable
         const std::vector<internal::HttpConstraint> &filtersAndMethods =
             std::vector<internal::HttpConstraint>{}) = 0;
 
+    // TODO: add doc
+    virtual HttpAppFramework &registerHttpStreamController(
+        const std::string &pathName,
+        const std::string &ctrlName,
+        const std::vector<internal::HttpConstraint> &filtersAndMethods =
+            std::vector<internal::HttpConstraint>{}) = 0;
+
     /// Register a handler into the framework.
     /**
      * @param pathPattern When the path of a http request matches the

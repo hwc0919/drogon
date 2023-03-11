@@ -29,7 +29,7 @@ namespace drogon
  * @brief The abstract base class for HTTP simple controllers.
  *
  */
-class HttpSimpleControllerBase : public virtual DrObjectBase
+class HttpStreamControllerBase : public virtual DrObjectBase
 {
   public:
     /**
@@ -38,11 +38,13 @@ class HttpSimpleControllerBase : public virtual DrObjectBase
      *
      * @param req The HTTP request.
      * @param callback The callback via which a response is returned.
+     * If the response is nullptr, means you are ready to receive stream body
      */
-    virtual void asyncHandleHttpRequest(
+    virtual void onRequestHeaders(
         const HttpRequestPtr &req,
         std::function<void(const HttpResponsePtr &)> &&callback) = 0;
-    virtual ~HttpSimpleControllerBase()
+    virtual void onReceiveMessage(const char *data, size_t len, bool last);
+    virtual ~HttpStreamControllerBase()
     {
     }
 };
@@ -55,16 +57,16 @@ class HttpSimpleControllerBase : public virtual DrObjectBase
  * flag to false for classes that have nondefault constructors.
  */
 template <typename T, bool AutoCreation = true>
-class HttpSimpleController : public DrObject<T>, public HttpSimpleControllerBase
+class HttpStreamController : public DrObject<T>, public HttpStreamControllerBase
 {
   public:
     static const bool isAutoCreation = AutoCreation;
-    virtual ~HttpSimpleController()
+    virtual ~HttpStreamController()
     {
     }
 
   protected:
-    HttpSimpleController()
+    HttpStreamController()
     {
     }
     static void registerSelf__(
@@ -72,11 +74,11 @@ class HttpSimpleController : public DrObject<T>, public HttpSimpleControllerBase
         const std::vector<internal::HttpConstraint> &filtersAndMethods)
     {
         LOG_TRACE << "register simple controller("
-                  << HttpSimpleController<T, AutoCreation>::classTypeName()
+                  << HttpStreamController<T, AutoCreation>::classTypeName()
                   << ") on path:" << path;
-        app().registerHttpSimpleController(
+        app().registerHttpStreamController(
             path,
-            HttpSimpleController<T, AutoCreation>::classTypeName(),
+            HttpStreamController<T, AutoCreation>::classTypeName(),
             filtersAndMethods);
     }
 
@@ -100,7 +102,7 @@ class HttpSimpleController : public DrObject<T>, public HttpSimpleControllerBase
     }
 };
 template <typename T, bool AutoCreation>
-typename HttpSimpleController<T, AutoCreation>::pathRegistrator
-    HttpSimpleController<T, AutoCreation>::registrator_;
+typename HttpStreamController<T, AutoCreation>::pathRegistrator
+    HttpStreamController<T, AutoCreation>::registrator_;
 
 }  // namespace drogon

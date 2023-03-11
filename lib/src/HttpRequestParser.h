@@ -38,6 +38,7 @@ class HttpRequestParser : public trantor::NonCopyable,
         kExpectChunkLen,
         kExpectChunkBody,
         kExpectLastEmptyChunk,
+        kExpectStreamBody,
         kGotAll,
     };
 
@@ -46,9 +47,9 @@ class HttpRequestParser : public trantor::NonCopyable,
     // return false if any error
     int parseRequest(trantor::MsgBuffer *buf);
 
-    bool gotAll() const
+    HttpRequestParseStatus status() const
     {
-        return status_ == HttpRequestParseStatus::kGotAll;
+        return status_;
     }
 
     void reset();

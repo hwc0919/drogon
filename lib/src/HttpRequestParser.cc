@@ -227,6 +227,11 @@ int HttpRequestParser::parseRequest(MsgBuffer *buf)
                 // We might want a kProcessHeaders status for code readability
                 // and maintainability.
 
+                // Try route stream controller
+                streamRouter->tryRoute(request_->path());
+                status_ = HttpRequestParseStatus::kExpectStreamBody;
+                return 0;
+
                 // process header information
                 auto &len = request_->getHeaderBy("content-length");
                 if (!len.empty())
