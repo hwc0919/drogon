@@ -83,6 +83,21 @@ struct is_awaitable<
 template <typename T>
 constexpr bool is_awaitable_v = is_awaitable<T>::value;
 
+struct CoroDispatcher
+{
+    virtual std::coroutine_handle<> dispatch(
+        std::coroutine_handle<> handle) = 0;
+    virtual ~CoroDispatcher() = default;
+};
+
+struct DefaultCoroDispatcher : public CoroDispatcher
+{
+    std::coroutine_handle<> dispatch(std::coroutine_handle<> handle) override
+    {
+        return handle;
+    }
+};
+
 /**
  * @struct final_awaiter
  * @brief An awaiter for `Task::promise_type::final_suspend()`. Transfer
@@ -90,6 +105,10 @@ constexpr bool is_awaitable_v = is_awaitable<T>::value;
  */
 struct final_awaiter
 {
+    explicit final_awaiter(CoroDispatcher *disp) : disp_(disp)
+    {
+    }
+
     bool await_ready() noexcept
     {
         return false;
@@ -98,12 +117,15 @@ struct final_awaiter
     template <typename T>
     auto await_suspend(std::coroutine_handle<T> handle) noexcept
     {
-        return handle.promise().continuation_;
+        return disp_->dispatch(handle.promise().continuation_);
     }
 
     void await_resume() noexcept
     {
     }
+
+  private:
+    CoroDispatcher *disp_;
 };
 
 /**
@@ -120,7 +142,8 @@ struct task_awaiter
     using handle_type = std::coroutine_handle<Promise>;
 
   public:
-    explicit task_awaiter(handle_type coro) : coro_(coro)
+    explicit task_awaiter(handle_type coro, CoroDispatcher *disp)
+        : coro_(coro), disp_(disp)
     {
     }
 
@@ -132,7 +155,7 @@ struct task_awaiter
     auto await_suspend(std::coroutine_handle<> handle) noexcept
     {
         coro_.promise().setContinuation(handle);
-        return coro_;
+        return disp_->dispatch(coro_);
     }
 
     auto await_resume()
@@ -150,9 +173,10 @@ struct task_awaiter
 
   private:
     handle_type coro_;
+    CoroDispatcher *disp_;
 };
 
-template <typename T = void>
+template <typename T = void, typename Dispatcher = DefaultCoroDispatcher>
 struct [[nodiscard]] Task
 {
     struct promise_type;
@@ -214,7 +238,7 @@ struct [[nodiscard]] Task
 
         auto final_suspend() noexcept
         {
-            return final_awaiter{};
+            return final_awaiter{&dispatcher_};
         }
 
         void unhandled_exception()
@@ -243,6 +267,7 @@ struct [[nodiscard]] Task
             continuation_ = handle;
         }
 
+        Dispatcher dispatcher_;
         std::optional<T> value;
         std::exception_ptr exception_;
         std::coroutine_handle<> continuation_;
@@ -250,14 +275,14 @@ struct [[nodiscard]] Task
 
     auto operator co_await() const noexcept
     {
-        return task_awaiter(coro_);
+        return task_awaiter(coro_, &coro_.promise().dispatcher_);
     }
 
     handle_type coro_;
 };
 
-template <>
-struct [[nodiscard]] Task<void>
+template <typename Dispatcher>
+struct [[nodiscard]] Task<void, Dispatcher>
 {
     struct promise_type;
     using handle_type = std::coroutine_handle<promise_type>;
@@ -312,7 +337,7 @@ struct [[nodiscard]] Task<void>
 
         auto final_suspend() noexcept
         {
-            return final_awaiter{};
+            return final_awaiter{&dispatcher_};
         }
 
         void unhandled_exception()
@@ -331,13 +356,14 @@ struct [[nodiscard]] Task<void>
             continuation_ = handle;
         }
 
+        Dispatcher dispatcher_;
         std::exception_ptr exception_;
         std::coroutine_handle<> continuation_;
     };
 
     auto operator co_await() const noexcept
     {
-        return task_awaiter(coro_);
+        return task_awaiter(coro_, &coro_.promise().dispatcher_);
     }
 
     handle_type coro_;
@@ -810,5 +836,65 @@ inline internal::EventLoopAwaiter<T> queueInLoopCoro(trantor::EventLoop *loop,
 {
     return internal::EventLoopAwaiter<T>(std::move(task), loop);
 }
+
+inline Task<> waitAll(uint32_t count)
+{
+    while (count > 0)
+    {
+        --count;
+        co_await std::suspend_always();
+    }
+}
+
+template <typename T>
+struct MultiAwaiter
+{
+    MultiAwaiter(std::vector<Task<T>> &&tasks)
+        : tasks_(std::move(tasks)), waitAll_(waitAll(tasks_.size()))
+    {
+    }
+
+    bool await_ready() const noexcept
+    {
+        return false;
+    }
+
+    auto await_suspend(std::coroutine_handle<> handle)
+    {
+        for (auto &task : tasks_)
+        {
+            task.coro_.promise().setContinuation(waitAll_.coro_);
+            task.coro_.resume();
+        }
+        waitAll_.coro_.promise().setContinuation(handle);
+        return waitAll_.coro_;
+    }
+
+    auto await_resume() const noexcept
+    {
+        if constexpr (std::is_same_v<T, void>)
+        {
+            for (auto &task : tasks_)
+            {
+                task.coro_.promise().result();
+            }
+            return;
+        }
+        else
+        {
+            std::vector<T> ret;
+            ret.reserve(tasks_.size());
+            for (auto &task : tasks_)
+            {
+                ret.push_back(std::move(task.coro_.promise().result()));
+            }
+            return ret;
+        }
+    }
+
+  private:
+    std::vector<Task<T>> tasks_;
+    Task<> waitAll_;
+};
 
 }  // namespace drogon

@@ -212,3 +212,24 @@ DROGON_TEST(SwitchThread)
     sync_wait(switch_thread());
     thread.wait();
 }
+
+Task<int> sleepAndReturn(int sleep, int ret)
+{
+    co_await sleepCoro(drogon::app().getLoop(), sleep);
+    co_return ret;
+}
+
+DROGON_TEST(MultiAwaiter)
+{
+    drogon::async_run([TEST_CTX]() -> Task<> {
+        std::vector<Task<int>> s;
+        s.push_back(sleepAndReturn(1, 1));
+        s.push_back(sleepAndReturn(2, 2));
+        s.push_back(sleepAndReturn(3, 3));
+        std::vector<int> result = co_await MultiAwaiter<int>(std::move(s));
+        CHECK(result.size() == 3);
+        CHECK(result[0] == 1);
+        CHECK(result[1] == 2);
+        CHECK(result[2] == 3);
+    });
+}
