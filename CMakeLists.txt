@@ -245,6 +245,7 @@ set(DROGON_SOURCES
     lib/src/HttpAppFrameworkImpl.cc
     lib/src/HttpBinder.cc
     lib/src/HttpClientImpl.cc
+    lib/src/HttpControllerBinder.cc
     lib/src/HttpControllersRouter.cc
     lib/src/HttpFileImpl.cc
     lib/src/HttpFileUploadRequest.cc
@@ -253,6 +254,7 @@ set(DROGON_SOURCES
     lib/src/HttpResponseImpl.cc
     lib/src/HttpResponseParser.cc
     lib/src/HttpServer.cc
+    lib/src/HttpSimpleControllerBinder.cc
     lib/src/HttpSimpleControllersRouter.cc
     lib/src/HttpUtils.cc
     lib/src/HttpViewData.cc
@@ -288,6 +290,7 @@ set(private_headers
     lib/src/FiltersFunction.h
     lib/src/HttpAppFrameworkImpl.h
     lib/src/HttpClientImpl.h
+    lib/src/HttpControllerBinder.h
     lib/src/HttpControllersRouter.h
     lib/src/HttpFileImpl.h
     lib/src/HttpFileUploadRequest.h
@@ -297,6 +300,7 @@ set(private_headers
     lib/src/HttpResponseImpl.h
     lib/src/HttpResponseParser.h
     lib/src/HttpServer.h
+    lib/src/HttpSimpleControllerBinder.h
     lib/src/HttpSimpleControllersRouter.h
     lib/src/HttpUtils.h
     lib/src/impl_forwards.h
