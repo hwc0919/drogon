@@ -30,7 +30,6 @@
 #include "HttpRequestImpl.h"
 #include "HttpResponseImpl.h"
 #include "HttpServer.h"
-#include "HttpSimpleControllersRouter.h"
 #include "HttpUtils.h"
 #include "ListenerManager.h"
 #include "PluginsManager.h"
@@ -71,7 +70,6 @@ using namespace std::placeholders;
 HttpAppFrameworkImpl::HttpAppFrameworkImpl()
     : staticFileRouterPtr_(new StaticFileRouter{}),
       httpCtrlsRouterPtr_(new HttpControllersRouter()),
-      httpSimpleCtrlsRouterPtr_(new HttpSimpleControllersRouter()),
       websockCtrlsRouterPtr_(new WebsocketControllersRouter()),
       listenerManagerPtr_(new ListenerManager),
       pluginsManagerPtr_(new PluginsManager),
@@ -298,9 +296,9 @@ HttpAppFramework &HttpAppFrameworkImpl::registerHttpSimpleController(
     const std::vector<internal::HttpConstraint> &filtersAndMethods)
 {
     assert(!routersInit_);
-    httpSimpleCtrlsRouterPtr_->registerHttpSimpleController(pathName,
-                                                            ctrlName,
-                                                            filtersAndMethods);
+    httpCtrlsRouterPtr_->registerHttpSimpleController(pathName,
+                                                      ctrlName,
+                                                      filtersAndMethods);
     return *this;
 }
 
@@ -660,7 +658,6 @@ void HttpAppFrameworkImpl::run()
     }
     routersInit_ = true;
     httpCtrlsRouterPtr_->init(ioLoops);
-    httpSimpleCtrlsRouterPtr_->init(ioLoops);
     staticFileRouterPtr_->init(ioLoops);
     websockCtrlsRouterPtr_->init();
     getLoop()->queueInLoop([this]() {
@@ -1006,10 +1003,8 @@ void HttpAppFrameworkImpl::websocketRequestHandling(
 
 std::vector<HttpHandlerInfo> HttpAppFrameworkImpl::getHandlersInfo() const
 {
-    auto ret = httpSimpleCtrlsRouterPtr_->getHandlersInfo();
-    auto v = httpCtrlsRouterPtr_->getHandlersInfo();
-    ret.insert(ret.end(), v.begin(), v.end());
-    v = websockCtrlsRouterPtr_->getHandlersInfo();
+    auto ret = httpCtrlsRouterPtr_->getHandlersInfo();
+    auto v = websockCtrlsRouterPtr_->getHandlersInfo();
     ret.insert(ret.end(), v.begin(), v.end());
     return ret;
 }
@@ -1161,19 +1156,7 @@ void HttpAppFrameworkImpl::httpRequestRouting(
     const HttpRequestImplPtr &req,
     std::function<void(const HttpResponsePtr &)> &&callback)
 {
-    RouteResult result = httpSimpleCtrlsRouterPtr_->route(req);
-    if (result.found)
-    {
-        if (!result.binderPtr)
-        {
-            // Invalid Http Method
-            handleInvalidHttpMethod(req, std::move(callback));
-            return;
-        }
-        httpRequestPostRouting(req, result.binderPtr, std::move(callback));
-        return;
-    }
-    result = httpCtrlsRouterPtr_->route(req);
+    RouteResult result = httpCtrlsRouterPtr_->route(req);
     if (result.found)
     {
         if (!result.binderPtr)
@@ -1550,7 +1533,6 @@ void HttpAppFrameworkImpl::quit()
             listenerManagerPtr_.reset();
             websockCtrlsRouterPtr_.reset();
             staticFileRouterPtr_.reset();
-            httpSimpleCtrlsRouterPtr_.reset();
             httpCtrlsRouterPtr_.reset();
             pluginsManagerPtr_.reset();
             redisClientManagerPtr_.reset();
