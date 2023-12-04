@@ -812,7 +812,7 @@ void HttpAppFrameworkImpl::websocketRequestRouting(
     if (result.result == RouteResult::Success)
     {
         websocketRequestPostRouting(req,
-                                    result.binderPtr,
+                                    std::move(result.binderPtr),
                                     std::move(callback),
                                     wsConnPtr);
         return;
@@ -831,7 +831,7 @@ void HttpAppFrameworkImpl::websocketRequestRouting(
 
 void HttpAppFrameworkImpl::websocketRequestPostRouting(
     const HttpRequestImplPtr &req,
-    const std::shared_ptr<ControllerBinderBase> &binderPtr,
+    std::shared_ptr<ControllerBinderBase> &&binderPtr,
     std::function<void(const HttpResponsePtr &)> &&callback,
     const WebSocketConnectionImplPtr &wsConnPtr)
 {
@@ -840,8 +840,11 @@ void HttpAppFrameworkImpl::websocketRequestPostRouting(
     aop.passPostRoutingObservers(req);
     aop.passPostRoutingAdvices(
         req,
-        [this, req, binderPtr, wsConnPtr, callback = std::move(callback)](
-            const HttpResponsePtr &resp) mutable {
+        [this,
+         req,
+         binderPtr = std::move(binderPtr),
+         wsConnPtr = std::move(wsConnPtr),
+         callback = std::move(callback)](const HttpResponsePtr &resp) mutable {
             if (resp)
             {
                 callCallback(req, resp, std::move(callback));
@@ -849,7 +852,7 @@ void HttpAppFrameworkImpl::websocketRequestPostRouting(
             else
             {
                 websocketRequestPassFilters(req,
-                                            binderPtr,
+                                            std::move(binderPtr),
                                             std::move(callback),
                                             wsConnPtr);
             }
@@ -858,7 +861,7 @@ void HttpAppFrameworkImpl::websocketRequestPostRouting(
 
 void HttpAppFrameworkImpl::websocketRequestPassFilters(
     const HttpRequestImplPtr &req,
-    const std::shared_ptr<ControllerBinderBase> &binderPtr,
+    std::shared_ptr<ControllerBinderBase> &&binderPtr,
     std::function<void(const HttpResponsePtr &)> &&callback,
     const WebSocketConnectionImplPtr &wsConnPtr)
 {
@@ -866,30 +869,36 @@ void HttpAppFrameworkImpl::websocketRequestPassFilters(
     if (filters.empty())
     {
         websocketRequestPreHandling(req,
-                                    binderPtr,
+                                    std::move(binderPtr),
                                     std::move(callback),
                                     wsConnPtr);
         return;
     }
-
-    auto callbackPtr =
-        std::make_shared<std::function<void(const HttpResponsePtr &)>>(
-            std::move(callback));
     filters_function::doFilters(
         filters,
         req,
-        callbackPtr,
-        [this, req, binderPtr, callbackPtr, wsConnPtr]() {
-            websocketRequestPreHandling(req,
-                                        binderPtr,
-                                        std::move(*callbackPtr),
-                                        wsConnPtr);
+        [this,
+         req,
+         wsConnPtr,
+         binderPtr = std::move(binderPtr),
+         callback = std::move(callback)](const HttpResponsePtr &resp) mutable {
+            if (resp)
+            {
+                callCallback(req, resp, std::move(callback));
+            }
+            else
+            {
+                websocketRequestPreHandling(req,
+                                            std::move(binderPtr),
+                                            std::move(callback),
+                                            wsConnPtr);
+            }
         });
 }
 
 void HttpAppFrameworkImpl::websocketRequestPreHandling(
     const HttpRequestImplPtr &req,
-    const std::shared_ptr<ControllerBinderBase> &binderPtr,
+    std::shared_ptr<ControllerBinderBase> &&binderPtr,
     std::function<void(const HttpResponsePtr &)> &&callback,
     const WebSocketConnectionImplPtr &wsConnPtr)
 {
@@ -904,8 +913,11 @@ void HttpAppFrameworkImpl::websocketRequestPreHandling(
     aop.passPreHandlingObservers(req);
     aop.passPreHandlingAdvices(
         req,
-        [this, req, wsConnPtr, binderPtr, callback = std::move(callback)](
-            const HttpResponsePtr &resp) mutable {
+        [this,
+         req,
+         wsConnPtr,
+         binderPtr = std::move(binderPtr),
+         callback = std::move(callback)](const HttpResponsePtr &resp) mutable {
             if (resp)
             {
                 callCallback(req, resp, std::move(callback));
@@ -913,7 +925,7 @@ void HttpAppFrameworkImpl::websocketRequestPreHandling(
             else
             {
                 websocketRequestHandling(req,
-                                         binderPtr,
+                                         std::move(binderPtr),
                                          std::move(callback),
                                          wsConnPtr);
             }
@@ -922,7 +934,7 @@ void HttpAppFrameworkImpl::websocketRequestPreHandling(
 
 void HttpAppFrameworkImpl::websocketRequestHandling(
     const HttpRequestImplPtr &req,
-    const std::shared_ptr<ControllerBinderBase> &binderPtr,
+    std::shared_ptr<ControllerBinderBase> &&binderPtr,
     std::function<void(const HttpResponsePtr &)> &&callback,
     const WebSocketConnectionImplPtr &wsConnPtr)
 {
@@ -1072,7 +1084,9 @@ void HttpAppFrameworkImpl::httpRequestRouting(
     RouteResult result = httpCtrlsRouterPtr_->route(req);
     if (result.result == RouteResult::Success)
     {
-        httpRequestPostRouting(req, result.binderPtr, std::move(callback));
+        httpRequestPostRouting(req,
+                               std::move(result.binderPtr),
+                               std::move(callback));
         return;
     }
     if (result.result == RouteResult::MethodNotAllowed)
@@ -1093,7 +1107,7 @@ void HttpAppFrameworkImpl::httpRequestRouting(
 
 void HttpAppFrameworkImpl::httpRequestPostRouting(
     const HttpRequestImplPtr &req,
-    const std::shared_ptr<ControllerBinderBase> &binderPtr,
+    std::shared_ptr<ControllerBinderBase> &&binderPtr,
     std::function<void(const HttpResponsePtr &)> &&callback)
 {
     // post-routing aop
@@ -1111,38 +1125,48 @@ void HttpAppFrameworkImpl::httpRequestPostRouting(
             }
             else
             {
-                httpRequestPassFilters(req, binderPtr, std::move(callback));
+                httpRequestPassFilters(req,
+                                       std::move(binderPtr),
+                                       std::move(callback));
             }
         });
 }
 
 void HttpAppFrameworkImpl::httpRequestPassFilters(
     const HttpRequestImplPtr &req,
-    const std::shared_ptr<ControllerBinderBase> &binderPtr,
+    std::shared_ptr<ControllerBinderBase> &&binderPtr,
     std::function<void(const HttpResponsePtr &)> &&callback)
 {
     // pass filters
     auto &filters = binderPtr->filters_;
     if (filters.empty())
     {
-        httpRequestPreHandling(req, binderPtr, std::move(callback));
+        httpRequestPreHandling(req, std::move(binderPtr), std::move(callback));
         return;
     }
-    auto callbackPtr =
-        std::make_shared<std::function<void(const HttpResponsePtr &)>>(
-            std::move(callback));
     filters_function::doFilters(
         filters,
         req,
-        callbackPtr,
-        [this, req, binderPtr, callbackPtr]() mutable {
-            httpRequestPreHandling(req, binderPtr, std::move(*callbackPtr));
+        [this,
+         req,
+         binderPtr = std::move(binderPtr),
+         callback = std::move(callback)](const HttpResponsePtr &resp) mutable {
+            if (resp)
+            {
+                callCallback(req, resp, std::move(callback));
+            }
+            else
+            {
+                httpRequestPreHandling(req,
+                                       std::move(binderPtr),
+                                       std::move(callback));
+            }
         });
 }
 
 void HttpAppFrameworkImpl::httpRequestPreHandling(
     const HttpRequestImplPtr &req,
-    const std::shared_ptr<ControllerBinderBase> &binderPtr,
+    std::shared_ptr<ControllerBinderBase> &&binderPtr,
     std::function<void(const HttpResponsePtr &)> &&callback)
 {
     if (req->method() == Options)
@@ -1156,22 +1180,26 @@ void HttpAppFrameworkImpl::httpRequestPreHandling(
     aop.passPreHandlingObservers(req);
     aop.passPreHandlingAdvices(
         req,
-        [this, req, binderPtr, callback = std::move(callback)](
-            const HttpResponsePtr &resp) mutable {
+        [this,
+         req,
+         binderPtr = std::move(binderPtr),
+         callback = std::move(callback)](const HttpResponsePtr &resp) mutable {
             if (resp)
             {
                 callCallback(req, resp, std::move(callback));
             }
             else
             {
-                httpRequestHandling(req, binderPtr, std::move(callback));
+                httpRequestHandling(req,
+                                    std::move(binderPtr),
+                                    std::move(callback));
             }
         });
 }
 
 void HttpAppFrameworkImpl::httpRequestHandling(
     const HttpRequestImplPtr &req,
-    const std::shared_ptr<ControllerBinderBase> &binderPtr,
+    std::shared_ptr<ControllerBinderBase> &&binderPtr,
     std::function<void(const HttpResponsePtr &)> &&callback)
 {
     // Check cached response
