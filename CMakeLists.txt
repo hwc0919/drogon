@@ -254,7 +254,6 @@ set(DROGON_SOURCES
     lib/src/HttpResponseImpl.cc
     lib/src/HttpResponseParser.cc
     lib/src/HttpServer.cc
-    lib/src/HttpSimpleControllerBinder.cc
     lib/src/HttpUtils.cc
     lib/src/HttpViewData.cc
     lib/src/IntranetIpFilter.cc
@@ -286,6 +285,7 @@ set(private_headers
     lib/src/AOPAdvice.h
     lib/src/CacheFile.h
     lib/src/ConfigLoader.h
+    lib/src/ControllerBinderBase.h
     lib/src/FiltersFunction.h
     lib/src/HttpAppFrameworkImpl.h
     lib/src/HttpClientImpl.h
@@ -299,7 +299,6 @@ set(private_headers
     lib/src/HttpResponseImpl.h
     lib/src/HttpResponseParser.h
     lib/src/HttpServer.h
-    lib/src/HttpSimpleControllerBinder.h
     lib/src/HttpUtils.h
     lib/src/impl_forwards.h
     lib/src/ListenerManager.h
