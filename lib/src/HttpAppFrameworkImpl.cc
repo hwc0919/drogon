@@ -912,8 +912,8 @@ HttpAppFramework &HttpAppFrameworkImpl::createDbClient(
     bool isFast,
     const std::string &characterSet,
     double timeout,
-    const std::unordered_map<std::string, std::string> &connectOptions,
-    bool autoBatch)
+    bool autoBatch,
+    const std::unordered_map<std::string, std::string> &connectOptions)
 {
     assert(!running_);
     dbClientManagerPtr_->createDbClient(dbType,
@@ -928,8 +928,8 @@ HttpAppFramework &HttpAppFrameworkImpl::createDbClient(
                                         isFast,
                                         characterSet,
                                         timeout,
-                                        connectOptions,
-                                        autoBatch);
+                                        autoBatch,
+                                        connectOptions);
     return *this;
 }
 
