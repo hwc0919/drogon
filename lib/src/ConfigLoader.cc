@@ -577,20 +577,45 @@ static void loadDbClients(const Json::Value &dbClients)
             }
         }
 
-        drogon::app().createDbClient({type,
-                                      host,
-                                      (unsigned short)port,
-                                      dbname,
-                                      user,
-                                      password,
-                                      connNum,
-                                      filename,
-                                      name,
-                                      isFast,
-                                      characterSet,
-                                      timeout,
-                                      autoBatch,
-                                      options});
+        if (type == "postgres" || type == "postgresql")
+        {
+            drogon::app().addDbClient(
+                std::make_shared<orm::PostgresConfig>(name,
+                                                      host,
+                                                      port,
+                                                      dbname,
+                                                      user,
+                                                      password,
+                                                      connNum,
+                                                      isFast,
+                                                      characterSet,
+                                                      timeout,
+                                                      autoBatch,
+                                                      std::move(options)));
+        }
+        else if (type == "mysql")
+        {
+            drogon::app().addDbClient(
+                std::make_shared<orm::MysqlConfig>(name,
+                                                   host,
+                                                   port,
+                                                   dbname,
+                                                   user,
+                                                   password,
+                                                   connNum,
+                                                   isFast,
+                                                   characterSet,
+                                                   timeout));
+        }
+        else if (type == "sqlite3")
+        {
+            drogon::app().addDbClient(std::make_shared<orm::Sqlite3Config>(
+                name, filename, connNum, timeout));
+        }
+        else
+        {
+            throw std::runtime_error("Unsupported database type: " + type);
+        }
     }
 }
 

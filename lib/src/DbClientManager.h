@@ -46,24 +46,12 @@ class DbClientManager : public trantor::NonCopyable
         return iter->second.getThreadData();
     }
 
-    void createDbClient(const DbGeneralConfig &cfg);
+    void addDbClient(const DbConfigPtr &cfg);
     bool areAllDbClientsAvailable() const noexcept;
 
   private:
+    std::vector<DbConfigPtr> dbConfigs_;
     std::map<std::string, DbClientPtr> dbClientsMap_;
-
-    struct DbInfo
-    {
-        std::string name_;
-        std::string connectionInfo_;
-        ClientType dbType_;
-        bool isFast_;
-        size_t connectionNumber_;
-        double timeout_;
-        bool autoBatch_;
-    };
-
-    std::vector<DbInfo> dbInfos_;
     std::map<std::string, IOThreadStorage<orm::DbClientPtr>> dbFastClientsMap_;
 };
 }  // namespace orm

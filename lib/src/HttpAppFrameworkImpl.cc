@@ -915,27 +915,60 @@ HttpAppFramework &HttpAppFrameworkImpl::createDbClient(
     bool autoBatch)
 {
     assert(!running_);
-    dbClientManagerPtr_->createDbClient({dbType,
-                                         host,
-                                         port,
-                                         databaseName,
-                                         userName,
-                                         password,
-                                         connectionNum,
-                                         filename,
-                                         name,
-                                         isFast,
-                                         characterSet,
-                                         timeout,
-                                         autoBatch,
-                                         {}});
+
+    // Some duplicated code as in ConfigLoader.cc
+
+    std::string type = dbType;
+    std::transform(type.begin(), type.end(), type.begin(), [](unsigned char c) {
+        return tolower(c);
+    });
+
+    if (type == "postgres" || type == "postgresql")
+    {
+        dbClientManagerPtr_->addDbClient(std::make_shared<orm::PostgresConfig>(
+            name,
+            host,
+            port,
+            databaseName,
+            userName,
+            password,
+            connectionNum,
+            isFast,
+            characterSet,
+            timeout,
+            autoBatch,
+            std::unordered_map<std::string, std::string>{}));
+    }
+    else if (type == "mysql")
+    {
+        dbClientManagerPtr_->addDbClient(
+            std::make_shared<orm::MysqlConfig>(name,
+                                               host,
+                                               port,
+                                               databaseName,
+                                               userName,
+                                               password,
+                                               connectionNum,
+                                               isFast,
+                                               characterSet,
+                                               timeout));
+    }
+    else if (type == "sqlite3")
+    {
+        dbClientManagerPtr_->addDbClient(std::make_shared<orm::Sqlite3Config>(
+            name, filename, connectionNum, timeout));
+    }
+    else
+    {
+        // throw? abort?
+        throw std::runtime_error("Unsupported database type: " + type);
+    }
     return *this;
 }
 
-HttpAppFramework &HttpAppFrameworkImpl::createDbClient(
-    const orm::DbGeneralConfig &cfg)
+HttpAppFramework &HttpAppFrameworkImpl::addDbClient(const orm::DbConfigPtr &cfg)
 {
-    dbClientManagerPtr_->createDbClient(cfg);
+    dbClientManagerPtr_->addDbClient(cfg);
     return *this;
 }
 
