@@ -203,7 +203,9 @@ void PgConnection::execSqlInLoop(
     std::vector<int> &&length,
     std::vector<int> &&format,
     ResultCallback &&rcb,
-    std::function<void(const std::exception_ptr &)> &&exceptCallback)
+    std::function<void(const std::exception_ptr &)> &&exceptCallback,
+    int resultFormat,
+    bool usePreparedStmt)
 {
     LOG_TRACE << sql;
     loop_->assertInLoopThread();
@@ -220,7 +222,14 @@ void PgConnection::execSqlInLoop(
     if (paraNum == 0)
     {
         isPreparingStatement_ = false;
-        if (PQsendQuery(connectionPtr_.get(), sql_.data()) == 0)
+        if (PQsendQueryParams(connectionPtr_.get(),
+                              sql_.data(),
+                              0,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              resultFormat) == 0)
         {
             LOG_ERROR << "send query error: "
                       << PQerrorMessage(connectionPtr_.get());
@@ -236,7 +245,7 @@ void PgConnection::execSqlInLoop(
         }
         flush();
     }
-    else
+    else if (usePreparedStmt)
     {
         auto iter = preparedStatementsMap_.find(sql_);
         if (iter != preparedStatementsMap_.end())
@@ -248,7 +257,7 @@ void PgConnection::execSqlInLoop(
                                     parameters.data(),
                                     length.data(),
                                     format.data(),
-                                    0) == 0)
+                                    resultFormat) == 0)
             {
                 LOG_ERROR << "send query error: "
                           << PQerrorMessage(connectionPtr_.get());
@@ -288,6 +297,31 @@ void PgConnection::execSqlInLoop(
             parameters_ = std::move(parameters);
             lengths_ = std::move(length);
             formats_ = std::move(format);
+            resultFormat_ = resultFormat;
+        }
+        flush();
+    }
+    else
+    {
+        if (PQsendQueryParams(connectionPtr_.get(),
+                              sql_.data(),
+                              static_cast<int>(paraNum),
+                              nullptr,
+                              parameters.data(),
+                              length.data(),
+                              format.data(),
+                              resultFormat) == 0)
+        {
+            LOG_ERROR << "send query error: "
+                      << PQerrorMessage(connectionPtr_.get());
+            if (isWorking_)
+            {
+                isWorking_ = false;
+                handleFatalError();
+                callback_ = nullptr;
+                idleCb_();
+            }
+            return;
         }
         flush();
     }
@@ -380,7 +414,7 @@ void PgConnection::doAfterPreparing()
                             parameters_.data(),
                             lengths_.data(),
                             formats_.data(),
-                            0) == 0)
+                            resultFormat_) == 0)
     {
         LOG_ERROR << "send query error: "
                   << PQerrorMessage(connectionPtr_.get());
