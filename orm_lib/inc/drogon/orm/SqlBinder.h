@@ -527,11 +527,13 @@ class DROGON_EXPORT SqlBinder : public trantor::NonCopyable
         resultFormat_ = resultFormat;
         return *this;
     }
+
     self &operator<<(ResultFormat &resultFormat)
     {
         resultFormat_ = resultFormat;
         return *this;
     }
+
     self &operator<<(ResultFormat &&resultFormat)
     {
         resultFormat_ = resultFormat;
@@ -548,14 +550,17 @@ class DROGON_EXPORT SqlBinder : public trantor::NonCopyable
         }
         return *this;
     }
+
     self &operator<<(const SqlOption &option)
     {
         return setSqlOption(option);
     }
+
     self &operator<<(SqlOption &option)
     {
         return setSqlOption(option);
     }
+
     self &operator<<(SqlOption &&option)
     {
         return setSqlOption(option);

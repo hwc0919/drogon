@@ -123,6 +123,7 @@ class TransactionImpl : public Transaction,
         ResultCallback &&rcb,
         std::function<void(const std::exception_ptr &)> &&exceptCallback,
         bool usePreparedStmt);
+
     std::shared_ptr<Transaction> newTransaction(
         const std::function<void(bool)> &) noexcept(false) override
     {
