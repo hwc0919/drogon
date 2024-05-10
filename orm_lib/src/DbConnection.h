@@ -123,7 +123,7 @@ class DbConnection : public trantor::NonCopyable
         bool usePreparedStmt) = 0;
 
     void execSql(
-        string_view &&sql,
+        std::string_view &&sql,
         size_t paraNum,
         std::vector<const char *> &&parameters,
         std::vector<int> &&length,
