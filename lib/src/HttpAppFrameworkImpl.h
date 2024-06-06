@@ -658,6 +658,9 @@ class HttpAppFrameworkImpl final : public HttpAppFramework
     HttpResponsePtr handleSessionForResponse(const HttpRequestImplPtr &req,
                                              const HttpResponsePtr &resp);
 
+    HttpAppFramework &enableStreamRequest(bool enable) override;
+    bool isStreamRequestEnabled() const override;
+
   private:
     void registerHttpController(const std::string &pathPattern,
                                 const internal::HttpBinderBasePtr &binder,
@@ -748,6 +751,8 @@ class HttpAppFrameworkImpl final : public HttpAppFramework
 
     ExceptionHandler exceptionHandler_{defaultExceptionHandler};
     bool enableCompressedRequest_{false};
+
+    bool enableStreamRequest_{false};
 };
 
 }  // namespace drogon
