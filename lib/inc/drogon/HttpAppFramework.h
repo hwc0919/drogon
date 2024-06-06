@@ -1590,6 +1590,9 @@ class DROGON_EXPORT HttpAppFramework : public trantor::NonCopyable
      */
     virtual int64_t getConnectionCount() const = 0;
 
+    virtual HttpAppFramework &enableStreamRequest(bool enable = true) = 0;
+    virtual bool isStreamRequestEnabled() const = 0;
+
   private:
     virtual void registerHttpController(
         const std::string &pathPattern,
