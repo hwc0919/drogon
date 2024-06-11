@@ -191,7 +191,7 @@ void HttpServer::onMessage(const TcpConnectionPtr &conn, MsgBuffer *buf)
             // TODO: maybe call onRequests() directly in stream mode
             requests.push_back(req);
         }
-        if (parseRes == 1)
+        if (parseRes == 1 || requestParser->gotAll())
         {
             if (req->isStreamMode())
             {
