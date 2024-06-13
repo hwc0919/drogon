@@ -69,6 +69,8 @@ class HttpRequestImpl : public HttpRequest
         flagForParsingJson_ = false;
         headers_.clear();
         cookies_.clear();
+        contentLengthHeaderValue_.reset();
+        realContentLength_ = 0;
         flagForParsingParameters_ = false;
         path_.clear();
         originalPath_.clear();
@@ -364,6 +366,16 @@ class HttpRequestImpl : public HttpRequest
         return cookies_;
     }
 
+    std::optional<size_t> contentLengthHeaderValue() const override
+    {
+        return contentLengthHeaderValue_;
+    }
+
+    size_t realContentLength() const
+    {
+        return realContentLength_;
+    }
+
     void setParameter(const std::string &key, const std::string &value) override
     {
         flagForParsingParameters_ = true;
@@ -413,6 +425,12 @@ class HttpRequestImpl : public HttpRequest
     void addCookie(const std::string &key, const std::string &value) override
     {
         cookies_[key] = value;
+    }
+
+    // make it override if needed. May need a better name
+    void setContentLengthHeaderValue(std::optional<size_t> length)
+    {
+        contentLengthHeaderValue_ = length;
     }
 
     void setPassThrough(bool flag) override
@@ -649,6 +667,8 @@ class HttpRequestImpl : public HttpRequest
     std::string query_;
     SafeStringMap<std::string> headers_;
     SafeStringMap<std::string> cookies_;
+    std::optional<size_t> contentLengthHeaderValue_;
+    size_t realContentLength_{0};
     mutable SafeStringMap<std::string> parameters_;
     mutable std::shared_ptr<Json::Value> jsonPtr_;
     SessionPtr sessionPtr_;

@@ -567,6 +567,8 @@ void HttpRequestImpl::swap(HttpRequestImpl &that) noexcept
     swap(query_, that.query_);
     swap(headers_, that.headers_);
     swap(cookies_, that.cookies_);
+    swap(contentLengthHeaderValue_, that.contentLengthHeaderValue_);
+    swap(realContentLength_, that.realContentLength_);
     swap(parameters_, that.parameters_);
     swap(jsonPtr_, that.jsonPtr_);
     swap(sessionPtr_, that.sessionPtr_);
@@ -743,6 +745,7 @@ void HttpRequestImpl::reserveBodySize(size_t length)
 void HttpRequestImpl::appendToBody(const char *data, size_t length)
 {
     assert(loop_->isInLoopThread());
+    realContentLength_ += length;
     if (streamHandlerPtr_)
     {
         assert(streamStatus_ == ReqStreamStatus::Open);

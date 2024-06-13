@@ -179,6 +179,17 @@ class DROGON_EXPORT HttpRequest
         return cookies();
     }
 
+    /**
+     * @brief Return content length parsed from the Content-Length header
+     * If no Content-Length header, return null.
+     */
+    virtual std::optional<size_t> contentLengthHeaderValue() const = 0;
+
+    std::optional<size_t> getContentLengthHeaderValue() const
+    {
+        return contentLengthHeaderValue();
+    }
+
     /// Get the query string of the request.
     /**
      * The query string is the substring after the '?' in the URL string.
