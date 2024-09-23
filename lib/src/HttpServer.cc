@@ -271,8 +271,7 @@ void HttpServer::onRequests(
     assert(!requests.empty());
 
     // will only be checked for the first request
-    if (requestParser->firstReq() && requests.size() == 1 &&
-        isWebSocket(requests[0]))
+    if (requests.size() == 1 && isWebSocket(requests[0]))
     {
         auto &req = requests[0];
         req->startProcessing();
