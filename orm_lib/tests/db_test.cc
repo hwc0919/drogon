@@ -1077,6 +1077,55 @@ DROGON_TEST(PostgreTest)
                 "what():",
                 e.base().what());
         }
+        // transaction auto commit
+        try
+        {
+            {
+                auto trans = co_await clientPtr->newTransactionCoro();
+                trans->setAutoCommit(false);
+                co_await trans->execSqlCoro(
+                    "update users set user_name = $1 where user_id = $2",
+                    "should not be this",
+                    "pg");
+                MANDATE(true);
+            }
+            auto result = co_await clientPtr->execSqlCoro(
+                "select user_name from users where user_id = $1", "pg");
+            MANDATE(result[0][0].as<std::string>() == "postgres");
+            LOG_INFO << "setAutoCommit success";
+        }
+        catch (const DrogonDbException &e)
+        {
+            FAULT(
+                "postgresql - DbClient coroutine transaction interface(1) "
+                "what():",
+                e.base().what());
+        }
+        // transaction commit
+        try
+        {
+            {
+                auto trans = co_await clientPtr->newTransactionCoro();
+                trans->setAutoCommit(false);
+                co_await trans->execSqlCoro(
+                    "update users set signature = $1 where user_id = $2",
+                    "commitCoro success",
+                    "pg");
+                MANDATE(true);
+                co_await trans->commitCoro();
+            }
+            auto result = co_await clientPtr->execSqlCoro(
+                "select signature from users where user_id = $1", "pg");
+            MANDATE(result[0][0].as<std::string>() == "commitCoro success");
+            LOG_INFO << "commitCoro success";
+        }
+        catch (const DrogonDbException &e)
+        {
+            FAULT(
+                "postgresql - DbClient coroutine transaction interface(2) "
+                "what():",
+                e.base().what());
+        }
     };
     drogon::sync_wait(coro_test());
 

@@ -40,6 +40,7 @@ TransactionImpl::~TransactionImpl()
     {
         auto loop = connectionPtr_->loop();
         loop->queueInLoop([conn = connectionPtr_,
+                           autoCommit = autoCommit_,
                            ucb = std::move(usedUpCallback_),
                            commitCb = std::move(commitCallback_)]() {
             conn->setIdleCallback([ucb = std::move(ucb)]() {
@@ -47,16 +48,16 @@ TransactionImpl::~TransactionImpl()
                     ucb();
             });
             conn->execSql(
-                "commit",
+                autoCommit ? "commit" : "rollback",
                 0,
                 {},
                 {},
                 {},
-                [commitCb](const Result &) {
+                [commitCb, autoCommit](const Result &) {
                     LOG_TRACE << "Transaction committed!";
                     if (commitCb)
                     {
-                        commitCb(true);
+                        commitCb(autoCommit);
                     }
                 },
                 [commitCb](const std::exception_ptr &ePtr) {
@@ -389,3 +390,21 @@ void TransactionImpl::execSqlInLoopWithTimeout(
     }
     timeoutFlagPtr->runTimer();
 }
+
+#ifdef __cpp_impl_coroutine
+void TransactionImpl::setAutoCommit(bool autoCommit)
+{
+    autoCommit_ = autoCommit;
+}
+
+drogon::Task<> TransactionImpl::commitCoro()
+{
+    co_await execSqlCoro("commit");
+    isCommitedOrRolledback_ = true;
+    if (commitCallback_)
+    {
+        commitCallback_(true);
+    }
+    co_return;
+}
+#endif

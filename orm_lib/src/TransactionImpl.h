@@ -50,6 +50,11 @@ class TransactionImpl : public Transaction,
         timeout_ = timeout;
     }
 
+#ifdef __cpp_impl_coroutine
+    void setAutoCommit(bool b) override;
+    Task<> commitCoro() override;
+#endif
+
   private:
     DbConnectionPtr connectionPtr_;
 
@@ -127,6 +132,7 @@ class TransactionImpl : public Transaction,
 
     std::function<void()> usedUpCallback_;
     bool isCommitedOrRolledback_{false};
+    bool autoCommit_{true};
     bool isWorking_{false};
     void execNewTask();
 

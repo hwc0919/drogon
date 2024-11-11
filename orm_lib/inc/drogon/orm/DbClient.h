@@ -371,6 +371,11 @@ class Transaction : public DbClient
     void closeAll() override
     {
     }
+
+#ifdef __cpp_impl_coroutine
+    virtual void setAutoCommit(bool) = 0;
+    virtual drogon::Task<> commitCoro() = 0;
+#endif
 };
 
 #ifdef __cpp_impl_coroutine
